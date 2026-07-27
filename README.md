@@ -140,3 +140,43 @@ Le bouton ne peut être utilisé que par le candidat concerné.
 Au démarrage, le bot vérifie maintenant tous les membres qui possèdent déjà le rôle **Accepted CV Police** et publie le formulaire s'ils ne sont pas encore enregistrés. Il continue aussi d'écouter les nouveaux ajouts du rôle en temps réel.
 
 Le bot doit avoir dans le salon d'intégration : **Voir le salon**, **Envoyer des messages**, **Intégrer des liens** et **Voir les anciens messages**. Active aussi **Server Members Intent** dans le Discord Developer Portal.
+
+
+## Render gratuit (Web Service)
+
+Le bot démarre aussi un petit serveur HTTP sur `0.0.0.0` et le port fourni par Render.
+
+Configuration Render :
+
+- Type : Web Service
+- Instance : Free
+- Build Command : `npm install`
+- Start Command : `npm start`
+- Health Check Path : `/health`
+
+Le service répond sur `/` et `/health`, ce qui évite l’erreur `No open ports detected`.
+
+
+## Mise à jour /pl
+
+La commande utilise maintenant uniquement :
+
+```text
+/pl membre:@Joueur
+```
+
+Le nom RP est pris automatiquement depuis le nom d’affichage Discord du membre. Il doit contenir un prénom et un nom, par exemple `John Smith`.
+
+## Base de données Neon (obligatoire sur Render)
+
+1. Crée un projet gratuit sur Neon.
+2. Copie la chaîne de connexion PostgreSQL fournie par Neon.
+3. Dans Render, ouvre **Environment** et ajoute :
+
+```env
+DATABASE_URL=postgresql://utilisateur:mot_de_passe@hote/neondb?sslmode=require
+```
+
+Ne mets jamais cette URL directement dans le code ou sur GitHub.
+Au premier démarrage, le bot crée automatiquement la table `officers`.
+Si `data/officers.json` contient déjà des policiers et que Neon est vide, ils sont importés automatiquement.

@@ -44,7 +44,7 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
     }
 
-    const officer = database.findByUserId(member.id);
+    const officer = await database.findByUserId(member.id);
     if (!officer) {
       return replyEphemeral(interaction, '❌ Ce membre n’est pas enregistré dans la police.', 7000);
     }
@@ -57,7 +57,7 @@ module.exports = {
       return replyEphemeral(interaction, `❌ Ce policier possède déjà le badge **${newBadge}**.`, 7000);
     }
 
-    const badgeOwner = database.findByBadge(newBadge);
+    const badgeOwner = await database.findByBadge(newBadge);
     if (badgeOwner && badgeOwner.userId !== member.id) {
       return replyEphemeral(interaction, `❌ Le badge **${newBadge}** est déjà utilisé.`, 7000);
     }
@@ -81,7 +81,7 @@ module.exports = {
 
     try {
       await member.setNickname(newNickname, `Badge modifié par ${interaction.user.tag}`);
-      database.updateBadge(member.id, newBadge, interaction.user.id);
+      await database.updateBadge(member.id, newBadge, interaction.user.id);
 
       const logSent = await sendLog(
         interaction.guild,

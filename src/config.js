@@ -11,7 +11,6 @@ const required = [
   'BLACKLIST_CHANNEL_ID',
   'ACCEPTANCE_LOG_CHANNEL_ID',
   'KICK_LOG_CHANNEL_ID',
-  'ACCEPTED_CV_ROLE_ID',
   'ONBOARDING_CHANNEL_ID'
 ];
 
@@ -29,8 +28,7 @@ module.exports = {
     citizen: process.env.CITIZEN_ROLE_ID,
     police: process.env.POLICE_ROLE_ID,
     academy: process.env.ACADEMY_ROLE_ID,
-    recruitment: process.env.RECRUITMENT_ROLE_ID,
-    acceptedCv: process.env.ACCEPTED_CV_ROLE_ID
+    recruitment: process.env.RECRUITMENT_ROLE_ID
   },
   channels: {
     blacklist: process.env.BLACKLIST_CHANNEL_ID,

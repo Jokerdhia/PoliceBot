@@ -16,14 +16,6 @@ module.exports = {
         .setName('membre')
         .setDescription('Le membre à recruter')
         .setRequired(true)
-    )
-    .addStringOption((option) =>
-      option
-        .setName('nom_rp')
-        .setDescription('Nom et prénom du personnage RP')
-        .setMinLength(2)
-        .setMaxLength(25)
-        .setRequired(true)
     ),
 
   async execute(interaction) {
@@ -38,7 +30,6 @@ module.exports = {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = interaction.options.getUser('membre', true);
-    const rpName = interaction.options.getString('nom_rp', true).trim().replace(/\s+/g, ' ');
 
     if (user.id === interaction.user.id) {
       return replyEphemeral(interaction, '❌ Tu ne peux pas te recruter toi-même.', 7000);
@@ -52,6 +43,21 @@ module.exports = {
 
     if (!member) {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
+    }
+
+    // /pl ne demande plus le nom RP. Le bot utilise directement le nom
+    // d’affichage actuel du membre et retire un éventuel ancien badge [123].
+    const rpName = member.displayName
+      .replace(/^\[\d{3}\]\s*/, '')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+    if (rpName.length < 3 || rpName.length > 25 || !rpName.includes(' ')) {
+      return replyEphemeral(
+        interaction,
+        '❌ Le membre doit d’abord avoir un **nom complet RP** sur Discord, par exemple **John Smith**.',
+        9000
+      );
     }
 
     let blacklistResult;
@@ -103,7 +109,7 @@ module.exports = {
       );
     }
 
-    const existingOfficer = database.findByUserId(member.id);
+    const existingOfficer = await database.findByUserId(member.id);
     const hasPoliceRole = member.roles.cache.has(config.roles.police);
     const hasAcademyRole = member.roles.cache.has(config.roles.academy);
 
@@ -118,10 +124,10 @@ module.exports = {
     // Nettoie automatiquement un ancien enregistrement devenu incohérent
     // lorsque les rôles Police et Academy ont été retirés manuellement.
     if (existingOfficer && !hasPoliceRole && !hasAcademyRole) {
-      database.removeOfficer(member.id);
+      await database.removeOfficer(member.id);
     }
 
-    const badge = database.getRandomAvailableBadge(config.badge.min, config.badge.max);
+    const badge = await database.getRandomAvailableBadge(config.badge.min, config.badge.max);
 
     if (badge === null) {
       return replyEphemeral(
@@ -152,7 +158,7 @@ module.exports = {
       await member.setNickname(policeNickname, `Recrutement par ${interaction.user.tag}`);
       nicknameChanged = true;
 
-      database.addOfficer({
+      await database.addOfficer({
         userId: member.id,
         badge,
         rpName,
@@ -176,7 +182,7 @@ module.exports = {
       console.error('Erreur /pl :', error);
 
       try {
-        database.removeOfficer(member.id);
+        await database.removeOfficer(member.id);
         if (rolesChanged) {
           await member.roles.remove([config.roles.police, config.roles.academy]).catch(() => null);
           await member.roles.add(config.roles.citizen).catch(() => null);

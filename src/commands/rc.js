@@ -33,7 +33,7 @@ module.exports = {
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const badge = interaction.options.getInteger('badge', true);
-    const officer = database.findByBadge(badge);
+    const officer = await database.findByBadge(badge);
 
     if (!officer) {
       return replyEphemeral(

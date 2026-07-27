@@ -78,7 +78,7 @@ module.exports = {
       );
     }
 
-    const officer = database.findByUserId(member.id);
+    const officer = await database.findByUserId(member.id);
 
     try {
       await resetToCitizen(member);
@@ -87,7 +87,7 @@ module.exports = {
         `Retrait police par ${interaction.user.tag} — ${reason}`
       );
 
-      const removedOfficer = database.removeOfficer(member.id);
+      const removedOfficer = await database.removeOfficer(member.id);
 
       const logSent = await sendLog(
         interaction.guild,

@@ -10,7 +10,7 @@ const rest = new REST({ version: '10' }).setToken(config.token);
 
 (async () => {
   try {
-    console.log('Déploiement des commandes /pl, /kick, /bg et /rc (badge automatique sur /pl)...');
+    console.log('Déploiement des commandes /pl, /kick, /bg et /rc (/pl sans nom RP)...');
     await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), { body: commands });
     console.log('✅ Commandes déployées avec succès.');
   } catch (error) {

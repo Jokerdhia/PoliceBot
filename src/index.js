@@ -1,5 +1,24 @@
+const http = require('node:http');
+
+const port = Number(process.env.PORT || 3000);
+const server = http.createServer((request, response) => {
+  if (request.url === '/' || request.url === '/health') {
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ status: 'online', service: 'Police Bot Discord' }));
+    return;
+  }
+
+  response.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+  response.end(JSON.stringify({ error: 'Not found' }));
+});
+
+server.listen(port, '0.0.0.0', () => {
+  console.log(`✅ Serveur HTTP actif sur le port ${port}`);
+});
+
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 const config = require('./config');
+const database = require('./database');
 const pl = require('./commands/pl');
 const kick = require('./commands/kick');
 const bg = require('./commands/bg');
@@ -48,7 +67,14 @@ client.on(Events.Error, (error) => console.error('Erreur du client Discord :', e
 process.on('unhandledRejection', (error) => console.error('Promesse rejetée non gérée :', error));
 process.on('uncaughtException', (error) => console.error('Exception non gérée :', error));
 
-client.login(config.token).catch((error) => {
-  console.error('❌ Connexion Discord impossible. Vérifie DISCORD_TOKEN.', error);
-  process.exitCode = 1;
-});
+async function startBot() {
+  try {
+    await database.initializeDatabase();
+    await client.login(config.token);
+  } catch (error) {
+    console.error('❌ Démarrage impossible. Vérifie DATABASE_URL et DISCORD_TOKEN.', error);
+    process.exitCode = 1;
+  }
+}
+
+startBot();
