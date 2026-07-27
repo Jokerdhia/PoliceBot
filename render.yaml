@@ -1,0 +1,34 @@
+services:
+  - type: worker
+    name: police-bot-discord
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: CLIENT_ID
+        value: "1531351585353891850"
+      - key: GUILD_ID
+        value: "1528151508346994739"
+      - key: CITIZEN_ROLE_ID
+        value: "1528151508346994741"
+      - key: POLICE_ROLE_ID
+        value: "1528151508393398413"
+      - key: ACADEMY_ROLE_ID
+        value: "1528151508456177753"
+      - key: RECRUITMENT_ROLE_ID
+        value: "1528151508393398415"
+      - key: BLACKLIST_CHANNEL_ID
+        value: "1528151510242824405"
+      - key: ACCEPTANCE_LOG_CHANNEL_ID
+        value: "1531358531318448340"
+      - key: KICK_LOG_CHANNEL_ID
+        value: "1531362488573235340"
+
+      - key: ACCEPTED_CV_ROLE_ID
+        value: "1528151508346994742"
+      - key: ONBOARDING_CHANNEL_ID
+        value: "1531389020339179621"
