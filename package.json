@@ -1,19 +1,20 @@
 {
   "name": "police-bot-discord",
-  "version": "1.4.0",
-  "description": "Bot Discord complet de gestion du personnel de police : recrutement, retrait, badges, recherche, blacklist et logs.",
+  "version": "1.4.4",
+  "description": "Bot Discord complet de gestion du personnel de police : acceptation CV, intégration, recrutement, retrait, badges, recherche, blacklist et logs.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
-    "deploy": "node src/deploy-commands.js"
+    "deploy": "node src/deploy-commands.js",
+    "check": "node --check src/index.js && node --check src/database.js && node --check src/deploy-commands.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20 <25"
   },
   "dependencies": {
     "discord.js": "^14.22.1",
     "dotenv": "^16.6.1",
-    "pg": "^8.16.3"
+    "pg": "^8.22.0"
   }
 }

@@ -80,12 +80,36 @@ module.exports = {
 
     const officer = await database.findByUserId(member.id);
 
+    // Le pseudo enregistré peut parfois contenir un ancien badge si le membre
+    // a été recruté plusieurs fois. Au kick, on supprime toujours le préfixe
+    // [123] et on restaure au minimum son nom RP sans badge.
+    const cleanNickname = (value) => {
+      if (!value) return null;
+      const cleaned = String(value)
+        .replace(/^\[\d{1,4}\]\s*/, '')
+        .trim()
+        .replace(/\s+/g, ' ');
+      return cleaned || null;
+    };
+
+    const nicknameAfterKick =
+      cleanNickname(officer?.originalNickname) ||
+      cleanNickname(officer?.rpName) ||
+      cleanNickname(member.displayName) ||
+      null;
+
     try {
       await resetToCitizen(member);
       await member.setNickname(
-        officer?.originalNickname ?? null,
+        nicknameAfterKick,
         `Retrait police par ${interaction.user.tag} — ${reason}`
       );
+
+      // Vérification après modification pour éviter qu'un ancien badge reste affiché.
+      const refreshedMember = await interaction.guild.members.fetch(member.id, { force: true });
+      if (/^\[\d{1,4}\]\s*/.test(refreshedMember.nickname || '')) {
+        throw new Error('Le pseudo contient encore un badge après le retrait. Vérifie la hiérarchie du rôle du bot.');
+      }
 
       const removedOfficer = await database.removeOfficer(member.id);
 
@@ -104,7 +128,7 @@ module.exports = {
       const logNotice = logSent ? '' : '\n⚠️ Le retrait est réussi, mais le log n’a pas pu être envoyé.';
       return replyEphemeral(
         interaction,
-        `✅ ${member} a été retiré de la police.\nTous les rôles gérables ont été retirés et **Citizen** a été ajouté.${logNotice}`
+        `✅ ${member} a été retiré de la police.\n**Police**, **Academy** et **Accepted CV Police** ont été retirés, **Citizen** a été ajouté et le badge a été supprimé du pseudo.${logNotice}`
       );
     } catch (error) {
       console.error('Erreur /kick :', error);

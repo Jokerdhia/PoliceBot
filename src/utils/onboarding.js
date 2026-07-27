@@ -27,10 +27,10 @@ function onboardingEmbed(member) {
     })
     .setTitle('🚔 CANDIDATURE POLICE ACCEPTÉE')
     .setDescription([
-      `${member}, ta candidature a été acceptée.`,
+      `${member}, ton accès Academy est actif.`,
       '',
       'Clique sur le bouton ci-dessous pour renseigner ton **nom complet RP**.',
-      'Un badge disponible entre **100 et 300** te sera attribué automatiquement.'
+      'Ton pseudo Discord sera ensuite mis à jour automatiquement avec ton badge.'
     ].join('\n'))
     .addFields({
       name: '📌 Format attendu',
@@ -98,8 +98,8 @@ async function sendOnboardingPrompt(member) {
 }
 
 async function handleAcceptedRole(oldMember, newMember) {
-  const receivedRole = !oldMember.roles.cache.has(config.roles.academy) &&
-    newMember.roles.cache.has(config.roles.academy);
+  const receivedRole = !oldMember.roles.cache.has(config.roles.acceptedCv) &&
+    newMember.roles.cache.has(config.roles.acceptedCv);
 
   if (!receivedRole || newMember.user.bot) return;
 
@@ -123,15 +123,11 @@ async function handleOnboardingButton(interaction) {
   }
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
-  if (!member || !member.roles.cache.has(config.roles.academy)) {
-    await replyEphemeral(interaction, '❌ Le rôle **Academy** est requis.', 7000);
+  if (!member || (!member.roles.cache.has(config.roles.acceptedCv) && !member.roles.cache.has(config.roles.academy))) {
+    await replyEphemeral(interaction, '❌ Le rôle **Academy** ou **Accepted CV Police** est requis.', 7000);
     return true;
   }
 
-  if (await database.findByUserId(targetId)) {
-    await replyEphemeral(interaction, '❌ Tu es déjà enregistré dans la police.', 7000);
-    return true;
-  }
 
   const modal = new ModalBuilder()
     .setCustomId(`${MODAL_PREFIX}${targetId}`)
@@ -176,7 +172,7 @@ async function handleOnboardingModal(interaction) {
     return true;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: 64 });
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
@@ -184,15 +180,12 @@ async function handleOnboardingModal(interaction) {
     return true;
   }
 
-  if (!member.roles.cache.has(config.roles.academy)) {
-    await replyEphemeral(interaction, '❌ Le rôle **Academy** est requis.', 7000);
+  if (!member.roles.cache.has(config.roles.acceptedCv) && !member.roles.cache.has(config.roles.academy)) {
+    await replyEphemeral(interaction, '❌ Le rôle **Academy** ou **Accepted CV Police** est requis.', 7000);
     return true;
   }
 
-  if (await database.findByUserId(member.id)) {
-    await replyEphemeral(interaction, '❌ Tu es déjà enregistré dans la police.', 7000);
-    return true;
-  }
+  const existingOfficer = await database.findByUserId(member.id);
 
   const rpName = interaction.fields.getTextInputValue('full_name').trim().replace(/\s+/g, ' ');
   if (!/^[\p{L}][\p{L}'’ -]{1,23}[\p{L}]$/u.test(rpName) || !rpName.includes(' ')) {
@@ -231,7 +224,9 @@ async function handleOnboardingModal(interaction) {
     return true;
   }
 
-  const badge = await database.getRandomAvailableBadge(config.badge.min, config.badge.max);
+  const badge = existingOfficer
+    ? existingOfficer.badge
+    : await database.getRandomAvailableBadge(config.badge.min, config.badge.max);
   if (badge === null) {
     await replyEphemeral(interaction, '❌ Aucun badge n’est actuellement disponible.', 9000);
     return true;
@@ -248,20 +243,27 @@ async function handleOnboardingModal(interaction) {
   let nicknameChanged = false;
 
   try {
-    await recruitMember(member);
-    rolesChanged = true;
-    await member.setNickname(policeNickname, 'Admission automatique via Academy');
+    if (!existingOfficer) {
+      await recruitMember(member);
+      rolesChanged = true;
+    }
+
+    await member.setNickname(policeNickname, 'Mise à jour du nom RP via panneau Academy');
     nicknameChanged = true;
 
-    await database.addOfficer({
-      userId: member.id,
-      badge,
-      rpName,
-      originalNickname,
-      recruitedBy: member.id,
-      recruitedAt: new Date().toISOString(),
-      admissionMode: 'academy_self_service'
-    });
+    if (existingOfficer) {
+      await database.updateRpName(member.id, rpName);
+    } else {
+      await database.addOfficer({
+        userId: member.id,
+        badge,
+        rpName,
+        originalNickname,
+        recruitedBy: member.id,
+        recruitedAt: new Date().toISOString(),
+        admissionMode: 'accepted_cv_self_service'
+      });
+    }
 
     const logSent = await sendLog(
       interaction.guild,
@@ -279,11 +281,11 @@ async function handleOnboardingModal(interaction) {
       10000
     );
   } catch (error) {
-    console.error('Erreur admission Academy :', error);
-    await database.removeOfficer(member.id);
+    console.error('Erreur admission Accepted CV :', error);
+    if (!existingOfficer) await database.removeOfficer(member.id);
     if (rolesChanged) {
       await member.roles.remove([config.roles.police, config.roles.academy]).catch(() => null);
-      await member.roles.add(config.roles.citizen).catch(() => null);
+      await member.roles.add([config.roles.citizen, config.roles.acceptedCv]).catch(() => null);
     }
     if (nicknameChanged) {
       await member.setNickname(originalNickname).catch(() => null);
@@ -295,9 +297,9 @@ async function handleOnboardingModal(interaction) {
 }
 
 async function scanAcceptedMembers(guild) {
-  const role = await guild.roles.fetch(config.roles.academy).catch(() => null);
+  const role = await guild.roles.fetch(config.roles.acceptedCv).catch(() => null);
   if (!role) {
-    console.error('❌ Le rôle Academy est introuvable. Vérifie ACCEPTED_CV_ROLE_ID.');
+    console.error('❌ Le rôle Accepted CV Police est introuvable. Vérifie ACCEPTED_CV_ROLE_ID.');
     return { scanned: 0, sent: 0 };
   }
 
@@ -308,8 +310,14 @@ async function scanAcceptedMembers(guild) {
   let scanned = 0;
   let sent = 0;
 
-  for (const member of role.members.values()) {
-    if (member.user.bot || await database.findByUserId(member.id)) continue;
+  const academyRole = await guild.roles.fetch(config.roles.academy).catch(() => null);
+  const candidates = new Map(role.members);
+  if (academyRole) {
+    for (const [id, member] of academyRole.members) candidates.set(id, member);
+  }
+
+  for (const member of candidates.values()) {
+    if (member.user.bot) continue;
     scanned += 1;
     const ok = await sendOnboardingPrompt(member).catch((error) => {
       console.error(`Impossible d’envoyer le formulaire à ${member.user.tag} :`, error.message);
@@ -318,7 +326,7 @@ async function scanAcceptedMembers(guild) {
     if (ok) sent += 1;
   }
 
-  console.log(`✅ Vérification Academy terminée : ${scanned} candidat(s), ${sent} message(s) disponible(s).`);
+  console.log(`✅ Vérification Accepted CV/Academy terminée : ${scanned} candidat(s), ${sent} message(s) disponible(s).`);
   return { scanned, sent };
 }
 
@@ -326,5 +334,6 @@ module.exports = {
   scanAcceptedMembers,
   handleAcceptedRole,
   handleOnboardingButton,
-  handleOnboardingModal
+  handleOnboardingModal,
+  sendOnboardingPrompt
 };

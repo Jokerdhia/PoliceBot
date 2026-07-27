@@ -6,6 +6,7 @@ const { recruitMember } = require('../utils/roles');
 const { sendLog, recruitmentEmbed } = require('../utils/logs');
 const { replyEphemeral } = require('../utils/replies');
 const { checkBlacklist } = require('../utils/blacklist');
+const { sendOnboardingPrompt } = require('../utils/onboarding');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -45,20 +46,13 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
     }
 
-    // /pl ne demande plus le nom RP. Le bot utilise directement le nom
-    // d’affichage actuel du membre et retire un éventuel ancien badge [123].
-    const rpName = member.displayName
+    // /pl accepte toujours le membre, même si son nom RP n’est pas encore défini.
+    // Le nom actuel sert temporairement jusqu’à ce qu’il remplisse le panneau Academy.
+    const rpName = (member.displayName || member.user.username)
       .replace(/^\[\d{3}\]\s*/, '')
       .trim()
-      .replace(/\s+/g, ' ');
-
-    if (rpName.length < 3 || rpName.length > 25 || !rpName.includes(' ')) {
-      return replyEphemeral(
-        interaction,
-        '❌ Le membre doit d’abord avoir un **nom complet RP** sur Discord, par exemple **John Smith**.',
-        9000
-      );
-    }
+      .replace(/\s+/g, ' ')
+      .slice(0, 25) || 'Nom RP à définir';
 
     let blacklistResult;
     try {
@@ -148,11 +142,13 @@ module.exports = {
       );
     }
 
+    const hadCitizenRole = member.roles.cache.has(config.roles.citizen);
+    const hadAcceptedCvRole = Boolean(config.roles.acceptedCv && member.roles.cache.has(config.roles.acceptedCv));
     let rolesChanged = false;
     let nicknameChanged = false;
 
     try {
-      await recruitMember(member);
+      const updatedMember = await recruitMember(member, `Recrutement /pl par ${interaction.user.tag}`);
       rolesChanged = true;
 
       await member.setNickname(policeNickname, `Recrutement par ${interaction.user.tag}`);
@@ -167,6 +163,8 @@ module.exports = {
         recruitedAt: new Date().toISOString()
       });
 
+      const onboardingSent = await sendOnboardingPrompt(member).catch(() => false);
+
       const logSent = await sendLog(
         interaction.guild,
         config.channels.acceptanceLogs,
@@ -176,7 +174,12 @@ module.exports = {
       const logNotice = logSent ? '' : '\n⚠️ Le recrutement est réussi, mais le log n’a pas pu être envoyé.';
       return replyEphemeral(
         interaction,
-        `✅ ${member} a été recruté avec le badge **${badge}**.\nPseudo : **${policeNickname}**${logNotice}`
+        `✅ ${updatedMember} a été recruté avec le badge **${badge}**.\n` +
+        `✅ Ajoutés : **Police**, **Academy**\n` +
+        `✅ Retirés : **Citizen**, **Accepted CV Police**\n` +
+        `Pseudo temporaire : **${policeNickname}**\n` +
+        (onboardingSent ? '📨 Le membre a été tagué dans le panneau Academy pour définir son nom RP.' : '⚠️ Le panneau Academy n’a pas pu être envoyé.') +
+        `${logNotice}`
       );
     } catch (error) {
       console.error('Erreur /pl :', error);
@@ -185,7 +188,10 @@ module.exports = {
         await database.removeOfficer(member.id);
         if (rolesChanged) {
           await member.roles.remove([config.roles.police, config.roles.academy]).catch(() => null);
-          await member.roles.add(config.roles.citizen).catch(() => null);
+          if (hadCitizenRole) await member.roles.add(config.roles.citizen).catch(() => null);
+          if (hadAcceptedCvRole && config.roles.acceptedCv) {
+            await member.roles.add(config.roles.acceptedCv).catch(() => null);
+          }
         }
         if (nicknameChanged) {
           await member.setNickname(originalNickname).catch(() => null);

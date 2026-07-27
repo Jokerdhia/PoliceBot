@@ -3,9 +3,10 @@ services:
     name: police-bot-discord
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     autoDeploy: true
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -21,6 +22,8 @@ services:
         value: "1528151508393398413"
       - key: ACADEMY_ROLE_ID
         value: "1528151508456177753"
+      - key: ACCEPTED_CV_ROLE_ID
+        sync: false
       - key: RECRUITMENT_ROLE_ID
         value: "1528151508393398415"
       - key: BLACKLIST_CHANNEL_ID
