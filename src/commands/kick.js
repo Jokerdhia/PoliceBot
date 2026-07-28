@@ -128,7 +128,7 @@ module.exports = {
       const logNotice = logSent ? '' : '\n⚠️ Le retrait est réussi, mais le log n’a pas pu être envoyé.';
       return replyEphemeral(
         interaction,
-        `✅ ${member} a été retiré de la police.\n**Police**, **Academy** et **Accepted CV Police** ont été retirés, **Citizen** a été ajouté et le badge a été supprimé du pseudo.${logNotice}`
+        `✅ ${member} a été retiré de la police.\nTous ses rôles gérables ont été retirés, **Citizen** a été ajouté et le badge a été supprimé du pseudo.${logNotice}`
       );
     } catch (error) {
       console.error('Erreur /kick :', error);

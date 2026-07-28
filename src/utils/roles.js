@@ -104,17 +104,53 @@ async function recruitMember(member, reason = 'Recrutement Police') {
 async function resetToCitizen(member, reason = 'Retrait Police') {
   member = await fetchFreshMember(member);
 
-  for (const roleId of [config.roles.police, config.roles.academy]) {
-    if (!roleId) continue;
-    await member.roles.remove(roleId, reason).catch(() => null);
+  const citizenRole = await member.guild.roles.fetch(config.roles.citizen).catch(() => null);
+  if (!citizenRole) {
+    throw new Error('Le rôle Citizen est introuvable. Vérifie son identifiant dans Render.');
+  }
+  if (citizenRole.managed) {
+    throw new Error('Le rôle Citizen est géré par une intégration Discord.');
+  }
+  if (!citizenRole.editable) {
+    throw new Error('Le rôle du bot doit être placé au-dessus du rôle Citizen.');
   }
 
-  await removeAcceptedCvRoles(member, reason).catch((error) => {
-    console.error('Impossible de retirer complètement Accepted CV pendant le kick :', error.message);
-  });
+  // Retirer tous les rôles que Discord autorise au bot à gérer.
+  // On conserve uniquement @everyone, les rôles d'intégration et Citizen.
+  const rolesToRemove = member.roles.cache.filter((role) =>
+    role.id !== member.guild.id &&
+    role.id !== config.roles.citizen &&
+    !role.managed &&
+    role.editable
+  );
 
-  await member.roles.add(config.roles.citizen, reason);
-  return fetchFreshMember(member);
+  if (rolesToRemove.size > 0) {
+    await member.roles.remove([...rolesToRemove.keys()], reason);
+  }
+
+  // Ajouter Citizen seulement s'il n'est pas déjà présent.
+  if (!member.roles.cache.has(config.roles.citizen)) {
+    await member.roles.add(config.roles.citizen, reason);
+  }
+
+  member = await fetchFreshMember(member);
+
+  // Signaler clairement les rôles ordinaires restants que le bot ne peut pas retirer.
+  const blockedRoles = member.roles.cache.filter((role) =>
+    role.id !== member.guild.id &&
+    role.id !== config.roles.citizen &&
+    !role.managed
+  );
+
+  if (blockedRoles.size > 0) {
+    const details = blockedRoles.map((role) => `${role.name} (${role.id})`).join(', ');
+    throw new Error(
+      `Certains rôles n'ont pas pu être retirés : ${details}. ` +
+      'Place le rôle du bot au-dessus de ces rôles dans la hiérarchie Discord.'
+    );
+  }
+
+  return member;
 }
 
 module.exports = {
