@@ -1,7 +1,7 @@
 {
   "name": "police-bot-discord",
-  "version": "1.4.4",
-  "description": "Bot Discord complet de gestion du personnel de police : acceptation CV, intégration, recrutement, retrait, badges, recherche, blacklist et logs.",
+  "version": "1.5.1",
+  "description": "Bot Discord police : /ac Accepted CV, /pl rôles uniquement, badge exclusivement après formulaire onboarding.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {

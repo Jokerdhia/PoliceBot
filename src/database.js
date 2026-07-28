@@ -3,9 +3,10 @@ const path = require('node:path');
 const { Pool } = require('pg');
 const config = require('./config');
 
+const secureDatabaseUrl = config.databaseUrl.replace(/sslmode=require(?=(&|$))/i, 'sslmode=verify-full');
+
 const pool = new Pool({
-  connectionString: config.databaseUrl,
-  ssl: config.databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false },
+  connectionString: secureDatabaseUrl,
   max: 5,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
@@ -41,6 +42,13 @@ async function initializeDatabase() {
       admission_mode TEXT,
       badge_updated_by TEXT,
       badge_updated_at TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS onboarding_pending (
+      user_id TEXT PRIMARY KEY,
+      requested_by TEXT,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
   await migrateJsonIfNeeded();
@@ -142,6 +150,29 @@ async function removeOfficer(userId) {
   const result = await pool.query('DELETE FROM officers WHERE user_id=$1 RETURNING *', [userId]);
   return mapOfficer(result.rows[0]);
 }
+
+async function setOnboardingPending(userId, requestedBy = null) {
+  await pool.query(
+    `INSERT INTO onboarding_pending (user_id, requested_by, requested_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (user_id) DO UPDATE
+     SET requested_by = EXCLUDED.requested_by, requested_at = NOW()`,
+    [userId, requestedBy]
+  );
+}
+
+async function isOnboardingPending(userId) {
+  const result = await pool.query(
+    'SELECT 1 FROM onboarding_pending WHERE user_id=$1 LIMIT 1',
+    [userId]
+  );
+  return result.rowCount > 0;
+}
+
+async function clearOnboardingPending(userId) {
+  await pool.query('DELETE FROM onboarding_pending WHERE user_id=$1', [userId]);
+}
+
 async function close() { await pool.end(); }
 
-module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, close };
+module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, setOnboardingPending, isOnboardingPending, clearOnboardingPending, close };

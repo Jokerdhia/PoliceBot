@@ -7,8 +7,9 @@ const commands = [
   require('./commands/bg'), require('./commands/rc'), require('./commands/ac')
 ];
 const { replyEphemeral } = require('./utils/replies');
-const { scanAcceptedMembers, handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
+const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
 
+const BUILD_VERSION = '1.5.1-definitif';
 let ready = false;
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));
@@ -17,13 +18,13 @@ const server = http.createServer(async (request, response) => {
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   if (request.url === '/') {
     response.writeHead(200);
-    return response.end(JSON.stringify({ service: 'Police Bot Discord', status: ready ? 'online' : 'starting' }));
+    return response.end(JSON.stringify({ service: 'Police Bot Discord', version: BUILD_VERSION, status: ready ? 'online' : 'starting' }));
   }
   if (request.url === '/health') {
     try {
       const databaseLatencyMs = await database.ping();
       response.writeHead(ready ? 200 : 503);
-      return response.end(JSON.stringify({ status: ready ? 'healthy' : 'starting', discord: client.isReady(), database: 'connected', databaseLatencyMs }));
+      return response.end(JSON.stringify({ version: BUILD_VERSION, status: ready ? 'healthy' : 'starting', discord: client.isReady(), database: 'connected', databaseLatencyMs }));
     } catch (error) {
       response.writeHead(503);
       return response.end(JSON.stringify({ status: 'unhealthy', database: 'disconnected', error: error.message }));
@@ -36,10 +37,18 @@ const server = http.createServer(async (request, response) => {
 client.once(Events.ClientReady, async (readyClient) => {
   ready = true;
   console.log(`✅ Connecté en tant que ${readyClient.user.tag}`);
+  console.log(`✅ BUILD ${BUILD_VERSION}`);
+  console.log('✅ /pl ne crée aucun badge et ne modifie aucun pseudo.');
+  console.log('✅ Le badge est créé uniquement après envoi valide du formulaire.');
   console.log(`✅ Commandes disponibles : ${commands.map((c) => `/${c.data.name}`).join(', ')}`);
   const guild = await readyClient.guilds.fetch(config.guildId).catch(() => null);
   if (!guild) return console.error('❌ Serveur introuvable. Vérifie GUILD_ID.');
-  await scanAcceptedMembers(guild);
+  if (config.roles.acceptedCv === config.roles.academy) {
+    console.error('❌ CONFIGURATION INCORRECTE : ACCEPTED_CV_ROLE_ID et ACADEMY_ROLE_ID sont identiques. Corrige les variables Render.');
+  }
+  const configuredAcceptedRole = await guild.roles.fetch(config.roles.acceptedCv).catch(() => null);
+  console.log(`ℹ️ Rôle Accepted CV configuré : ${configuredAcceptedRole ? `${configuredAcceptedRole.name} (${configuredAcceptedRole.id})` : 'introuvable'}`);
+  console.log('ℹ️ Scan automatique au démarrage désactivé pour éviter les anciens panneaux et les doublons.');
 });
 client.on(Events.GuildMemberUpdate, handleAcceptedRole);
 client.on(Events.InteractionCreate, async (interaction) => {

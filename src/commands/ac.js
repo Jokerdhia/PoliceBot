@@ -5,10 +5,32 @@ const { canUsePoliceCommands } = require('../utils/permissions');
 const { checkBlacklist } = require('../utils/blacklist');
 const { replyEphemeral } = require('../utils/replies');
 
+function normalizeRoleName(name) {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+async function resolveAcceptedCvRole(guild) {
+  const configured = await guild.roles.fetch(config.roles.acceptedCv).catch(() => null);
+  const acceptedNames = new Set(['accepted cv police', 'accepted cv', 'cv police accepted', 'police accepted cv']);
+
+  if (configured && acceptedNames.has(normalizeRoleName(configured.name))) {
+    return configured;
+  }
+
+  await guild.roles.fetch().catch(() => null);
+  const byName = guild.roles.cache.find((role) => acceptedNames.has(normalizeRoleName(role.name)));
+  return byName || null;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ac')
-    .setDescription('Accepter une candidature Police et lancer l’intégration du candidat.')
+    .setDescription('Donner uniquement le rôle Accepted CV Police à un candidat.')
     .addUserOption((option) =>
       option
         .setName('membre')
@@ -41,12 +63,8 @@ module.exports = {
     }
 
     const existingOfficer = await database.findByUserId(member.id);
-    if (existingOfficer || member.roles.cache.has(config.roles.police) || member.roles.cache.has(config.roles.academy)) {
-      return replyEphemeral(interaction, '❌ Ce membre est déjà enregistré ou possède déjà un rôle Police/Academy.', 8000);
-    }
-
-    if (member.roles.cache.has(config.roles.acceptedCv)) {
-      return replyEphemeral(interaction, 'ℹ️ Ce membre possède déjà le rôle **Accepted CV Police**.', 7000);
+    if (existingOfficer || member.roles.cache.has(config.roles.police)) {
+      return replyEphemeral(interaction, '❌ Ce membre est déjà enregistré comme policier.', 8000);
     }
 
     const blacklistResult = await checkBlacklist(interaction.guild, member.id).catch((error) => ({
@@ -73,28 +91,42 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Je ne peux pas gérer ce membre. Place le rôle du bot au-dessus de ses rôles.', 9000);
     }
 
-    const acceptedRole = await interaction.guild.roles.fetch(config.roles.acceptedCv).catch(() => null);
+    const acceptedRole = await resolveAcceptedCvRole(interaction.guild);
     if (!acceptedRole) {
-      return replyEphemeral(interaction, '❌ Le rôle **Accepted CV Police** est introuvable. Vérifie `ACCEPTED_CV_ROLE_ID`.', 10000);
+      return replyEphemeral(interaction, '❌ Le rôle **Accepted CV Police** est introuvable. Vérifie son nom et `ACCEPTED_CV_ROLE_ID` dans Render.', 10000);
     }
     if (acceptedRole.position >= botMember.roles.highest.position) {
       return replyEphemeral(interaction, '❌ Le rôle du bot doit être placé au-dessus du rôle **Accepted CV Police**.', 10000);
     }
 
     try {
-      // /ac valide uniquement le CV : aucun rôle Police ou Academy n'est ajouté ici.
-      await member.roles.add(config.roles.acceptedCv, `Candidature acceptée par ${interaction.user.tag}`);
+      // /ac doit laisser le candidat uniquement en attente avec Accepted CV Police.
+      // Citizen est conservé. Police et Academy sont retirés s'ils étaient présents par erreur.
+      const reason = `Candidature acceptée par ${interaction.user.tag}`;
+      await member.roles.add(acceptedRole.id, reason);
 
-      const refreshedMember = await interaction.guild.members.fetch(member.id);
-      if (!refreshedMember.roles.cache.has(config.roles.acceptedCv)) {
+      const rolesToRemove = [config.roles.police, config.roles.academy]
+        .filter((roleId) => roleId && roleId !== acceptedRole.id && member.roles.cache.has(roleId));
+      if (rolesToRemove.length > 0) {
+        await member.roles.remove(rolesToRemove, 'Nettoyage des rôles avant intégration Accepted CV');
+      }
+
+      const refreshedMember = await interaction.guild.members.fetch(member.id, { force: true });
+      if (!refreshedMember.roles.cache.has(acceptedRole.id)) {
         throw new Error('Discord n’a pas confirmé l’ajout du rôle Accepted CV Police.');
+      }
+      if (refreshedMember.roles.cache.has(config.roles.academy)) {
+        throw new Error('Le rôle Academy est toujours présent. Vérifie la hiérarchie des rôles du bot.');
+      }
+      if (refreshedMember.roles.cache.has(config.roles.police)) {
+        throw new Error('Le rôle Police est toujours présent. Vérifie la hiérarchie des rôles du bot.');
       }
 
       return replyEphemeral(
         interaction,
         `✅ La candidature de ${member} est acceptée.\n` +
         'Rôle ajouté : **Accepted CV Police**.\n' +
-        'Les rôles **Police** et **Academy** seront ajoutés uniquement après le formulaire d’intégration.',
+        'Le rôle **Citizen** reste présent. Utilise ensuite **/pl** pour ajouter Police et Academy et envoyer la demande de badge.',
         10000
       );
     } catch (error) {

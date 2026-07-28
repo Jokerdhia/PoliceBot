@@ -25,3 +25,15 @@
 
 ## Important
 Ne publie jamais `.env`, `DISCORD_TOKEN` ou `DATABASE_URL` sur GitHub.
+
+
+## Correction /ac
+`/ac` ajoute uniquement **Accepted CV Police**, conserve **Citizen**, et retire **Police/Academy** s'ils étaient présents par erreur. Vérifiez que `ACCEPTED_CV_ROLE_ID` est l'identifiant du rôle Accepted CV et non celui d'Academy.
+
+## Flux des commandes
+
+- `/ac membre:@Utilisateur` : ajoute uniquement **Accepted CV Police**. Le rôle Citizen reste présent.
+- `/pl membre:@Utilisateur` : ajoute **Police** et **Academy**, retire **Citizen** et **Accepted CV Police**, sans modifier le pseudo et sans attribuer de badge.
+- Après `/pl`, le bot mentionne le membre dans `ONBOARDING_CHANNEL_ID` avec le bouton **Demander mon badge**.
+- Le membre saisit un nom RP complet, par exemple `Jean Smith`.
+- Le bot attribue alors un badge libre et modifie le pseudo en `[badge] Jean Smith`.
