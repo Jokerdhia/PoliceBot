@@ -156,9 +156,24 @@ async function setOnboardingPending(userId, requestedBy = null) {
     `INSERT INTO onboarding_pending (user_id, requested_by, requested_at)
      VALUES ($1, $2, NOW())
      ON CONFLICT (user_id) DO UPDATE
-     SET requested_by = EXCLUDED.requested_by, requested_at = NOW()`,
+     SET requested_by = COALESCE(EXCLUDED.requested_by, onboarding_pending.requested_by),
+         requested_at = NOW()`,
     [userId, requestedBy]
   );
+}
+
+async function getOnboardingPending(userId) {
+  const result = await pool.query(
+    'SELECT user_id, requested_by, requested_at FROM onboarding_pending WHERE user_id=$1 LIMIT 1',
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    userId: row.user_id,
+    requestedBy: row.requested_by,
+    requestedAt: row.requested_at?.toISOString?.() ?? row.requested_at
+  };
 }
 
 async function isOnboardingPending(userId) {
@@ -175,4 +190,4 @@ async function clearOnboardingPending(userId) {
 
 async function close() { await pool.end(); }
 
-module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, setOnboardingPending, isOnboardingPending, clearOnboardingPending, close };
+module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, close };

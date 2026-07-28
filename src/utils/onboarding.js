@@ -228,9 +228,17 @@ async function handleOnboardingModal(interaction) {
     return true;
   }
 
-  if (!(await database.isOnboardingPending(member.id))) {
+  const pendingRequest = await database.getOnboardingPending(member.id);
+  if (!pendingRequest) {
     await replyEphemeral(interaction, '❌ Cette demande a expiré ou n’est pas active. Demande au Recruitment de refaire **/pl**.', 9000);
     return true;
+  }
+
+  // Le responsable est la personne ayant utilisé /pl, pas le nouvel officier
+  // qui remplit ensuite son propre formulaire de badge.
+  let recruiter = interaction.user;
+  if (pendingRequest.requestedBy) {
+    recruiter = await interaction.client.users.fetch(pendingRequest.requestedBy).catch(() => interaction.user);
   }
 
   const rpName = interaction.fields.getTextInputValue('full_name').trim().replace(/\s+/g, ' ');
@@ -284,7 +292,7 @@ async function handleOnboardingModal(interaction) {
       badge,
       rpName,
       originalNickname,
-      recruitedBy: member.id,
+      recruitedBy: recruiter.id,
       recruitedAt: new Date().toISOString(),
       admissionMode: 'academy_badge_request'
     });
@@ -294,7 +302,7 @@ async function handleOnboardingModal(interaction) {
     const logSent = await sendLog(
       interaction.guild,
       config.channels.acceptanceLogs,
-      recruitmentEmbed({ member, badge, rpName, recruiter: member.user })
+      recruitmentEmbed({ member, badge, rpName, recruiter })
     );
 
     const onboardingChannel = await interaction.guild.channels.fetch(config.channels.onboarding).catch(() => null);
