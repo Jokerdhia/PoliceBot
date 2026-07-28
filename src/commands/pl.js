@@ -6,6 +6,7 @@ const { recruitMember } = require('../utils/roles');
 const { replyEphemeral } = require('../utils/replies');
 const { checkBlacklist } = require('../utils/blacklist');
 const { sendOnboardingPrompt } = require('../utils/onboarding');
+const { sendLog } = require('../utils/logs');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -162,11 +163,19 @@ module.exports = {
         .setFooter({ text: `${interaction.guild.name} • Pré-intégration du personnel` })
         .setTimestamp();
 
-      return replyEphemeral(
-        interaction,
-        { embeds: [confirmationEmbed] },
-        10000
+      const logSent = await sendLog(
+        interaction.guild,
+        config.channels.acceptanceLogs,
+        confirmationEmbed
       );
+
+      if (!logSent) {
+        throw new Error('Le log /pl n’a pas pu être envoyé dans ACCEPTANCE_LOG_CHANNEL_ID.');
+      }
+
+      // La commande ne laisse aucun message privé : le résultat reste uniquement dans les logs.
+      await interaction.deleteReply().catch(() => null);
+      return null;
     } catch (error) {
       console.error('Erreur /pl :', error);
 

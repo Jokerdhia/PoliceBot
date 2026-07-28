@@ -151,6 +151,38 @@ async function removeOfficer(userId) {
   return mapOfficer(result.rows[0]);
 }
 
+// Supprime toutes les données Police connues pour un membre dans une transaction.
+// Cela inclut son dossier officier et toute demande d'intégration encore en attente.
+async function deleteAllPoliceData(userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const officerResult = await client.query(
+      'DELETE FROM officers WHERE user_id=$1 RETURNING *',
+      [userId]
+    );
+
+    const pendingResult = await client.query(
+      'DELETE FROM onboarding_pending WHERE user_id=$1',
+      [userId]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      officer: mapOfficer(officerResult.rows[0]),
+      officerDeleted: officerResult.rowCount > 0,
+      onboardingDeleted: pendingResult.rowCount > 0
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function setOnboardingPending(userId, requestedBy = null) {
   await pool.query(
     `INSERT INTO onboarding_pending (user_id, requested_by, requested_at)
@@ -190,4 +222,4 @@ async function clearOnboardingPending(userId) {
 
 async function close() { await pool.end(); }
 
-module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, close };
+module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, close };

@@ -111,7 +111,8 @@ module.exports = {
         throw new Error('Le pseudo contient encore un badge après le retrait. Vérifie la hiérarchie du rôle du bot.');
       }
 
-      const removedOfficer = await database.removeOfficer(member.id);
+      const deletedData = await database.deleteAllPoliceData(member.id);
+      const removedOfficer = deletedData.officer;
 
       const logSent = await sendLog(
         interaction.guild,
@@ -128,7 +129,7 @@ module.exports = {
       const logNotice = logSent ? '' : '\n⚠️ Le retrait est réussi, mais le log n’a pas pu être envoyé.';
       return replyEphemeral(
         interaction,
-        `✅ ${member} a été retiré de la police.\nTous ses rôles gérables ont été retirés, **Citizen** a été ajouté et le badge a été supprimé du pseudo.${logNotice}`
+        `✅ ${member} a été retiré de la police.\nTous ses rôles gérables ont été retirés, **Citizen** a été ajouté, le badge a été supprimé du pseudo et **toutes ses données Police ont été effacées de la base du bot**.${logNotice}`
       );
     } catch (error) {
       console.error('Erreur /kick :', error);
