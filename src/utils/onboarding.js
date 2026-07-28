@@ -11,7 +11,6 @@ const {
 const config = require('../config');
 const database = require('../database');
 const { checkBlacklist } = require('./blacklist');
-const { sendLog, recruitmentEmbed } = require('./logs');
 const { replyEphemeral } = require('./replies');
 
 const BUTTON_PREFIX = 'police_badge_request:';
@@ -326,19 +325,12 @@ async function handleOnboardingModal(interaction) {
     officerCreated = true;
     await database.clearOnboardingPending(member.id);
 
-    const logSent = await sendLog(
-      interaction.guild,
-      config.channels.acceptanceLogs,
-      recruitmentEmbed({ member, badge, rpName, recruiter })
-    );
-
     const onboardingChannel = await interaction.guild.channels.fetch(config.channels.onboarding).catch(() => null);
     await deleteOnboardingPrompts(onboardingChannel, member.id);
 
     await replyEphemeral(
       interaction,
-      `✅ Ton badge **${badge}** a été attribué. Ton pseudo est maintenant **${policeNickname}**.` +
-      (logSent ? '' : '\n⚠️ Le log d’acceptation n’a pas pu être envoyé.'),
+      `✅ Ton badge **${badge}** a été attribué. Ton pseudo est maintenant **${policeNickname}**.`,
       10000
     );
   } catch (error) {
