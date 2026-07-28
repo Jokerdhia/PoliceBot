@@ -17,6 +17,9 @@ const { replyEphemeral } = require('./replies');
 const BUTTON_PREFIX = 'police_badge_request:';
 const MODAL_PREFIX = 'police_badge_modal:';
 
+// Verrou par membre : empêche /pl et guildMemberUpdate d'envoyer le même panneau en parallèle.
+const onboardingLocks = new Map();
+
 function onboardingEmbed(member) {
   return new EmbedBuilder()
     .setColor(0x1d4ed8)
@@ -51,51 +54,75 @@ function onboardingButton(memberId) {
   );
 }
 
-async function hasExistingOnboardingPrompt(channel, memberId) {
-  if (!channel?.isTextBased()) return false;
+async function getOnboardingPrompts(channel, memberId) {
+  if (!channel?.isTextBased()) return [];
   const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
-  if (!messages) return false;
+  if (!messages) return [];
 
   const customId = `${BUTTON_PREFIX}${memberId}`;
-  return messages.some((message) =>
-    message.author.id === channel.client.user.id &&
-    message.components.some((row) =>
-      row.components.some((component) => component.customId === customId)
+  return [...messages.values()]
+    .filter((message) =>
+      message.author.id === channel.client.user.id &&
+      message.components.some((row) =>
+        row.components.some((component) => component.customId === customId)
+      )
     )
-  );
+    .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 }
 
 async function sendOnboardingPrompt(member) {
-  const channel = await member.guild.channels.fetch(config.channels.onboarding).catch(() => null);
-  if (!channel || !channel.isTextBased()) {
-    console.error('ONBOARDING_CHANNEL_ID est introuvable ou ne pointe pas vers un salon texte.');
-    return false;
-  }
+  // Toutes les demandes du même membre passent dans une seule file d'attente.
+  const previous = onboardingLocks.get(member.id) || Promise.resolve();
+  const current = previous
+    .catch(() => null)
+    .then(async () => {
+      const channel = await member.guild.channels.fetch(config.channels.onboarding).catch(() => null);
+      if (!channel || !channel.isTextBased()) {
+        console.error('ONBOARDING_CHANNEL_ID est introuvable ou ne pointe pas vers un salon texte.');
+        return false;
+      }
 
-  const permissions = channel.permissionsFor(member.guild.members.me);
-  const required = [
-    PermissionFlagsBits.ViewChannel,
-    PermissionFlagsBits.SendMessages,
-    PermissionFlagsBits.EmbedLinks,
-    PermissionFlagsBits.ReadMessageHistory
-  ];
-  if (!required.every((permission) => permissions?.has(permission))) {
-    console.error('Permissions insuffisantes dans ONBOARDING_CHANNEL_ID.');
-    return false;
-  }
+      const permissions = channel.permissionsFor(member.guild.members.me);
+      const required = [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageMessages
+      ];
+      if (!required.every((permission) => permissions?.has(permission))) {
+        console.error('Permissions insuffisantes dans ONBOARDING_CHANNEL_ID (Voir, Envoyer, Intégrer des liens, Historique et Gérer les messages requis).');
+        return false;
+      }
 
-  if (await hasExistingOnboardingPrompt(channel, member.id)) {
-    console.log(`Information : une demande de badge existe déjà pour ${member.user.tag}.`);
-    return true;
-  }
+      const prompts = await getOnboardingPrompts(channel, member.id);
+      const payload = {
+        content: `${member}`,
+        embeds: [onboardingEmbed(member)],
+        components: [onboardingButton(member.id)],
+        allowedMentions: { users: [member.id] }
+      };
 
-  await channel.send({
-    content: `${member}`,
-    embeds: [onboardingEmbed(member)],
-    components: [onboardingButton(member.id)],
-    allowedMentions: { users: [member.id] }
-  });
-  return true;
+      if (prompts.length > 0) {
+        // Conserve un seul panneau, actualise son contenu et supprime tous les doublons.
+        const [kept, ...duplicates] = prompts;
+        await kept.edit(payload).catch(() => null);
+        for (const duplicate of duplicates) {
+          await duplicate.delete().catch(() => null);
+        }
+        console.log(`Information : panneau de badge actualisé pour ${member.user.tag}; ${duplicates.length} doublon(s) supprimé(s).`);
+        return true;
+      }
+
+      await channel.send(payload);
+      return true;
+    })
+    .finally(() => {
+      if (onboardingLocks.get(member.id) === current) onboardingLocks.delete(member.id);
+    });
+
+  onboardingLocks.set(member.id, current);
+  return current;
 }
 
 // Déclenché dès que le rôle Academy est ajouté.

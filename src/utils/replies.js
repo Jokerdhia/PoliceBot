@@ -2,11 +2,15 @@ const { MessageFlags } = require('discord.js');
 
 const DEFAULT_DELETE_DELAY = 5000;
 
-async function replyEphemeral(interaction, content, deleteAfter = DEFAULT_DELETE_DELAY) {
+async function replyEphemeral(interaction, response, deleteAfter = DEFAULT_DELETE_DELAY) {
+  const payload = typeof response === 'string'
+    ? { content: response }
+    : { ...response };
+
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({ content });
+    await interaction.editReply(payload);
   } else {
-    await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
   }
 
   if (deleteAfter > 0) {

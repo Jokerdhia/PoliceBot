@@ -9,7 +9,7 @@ const commands = [
 const { replyEphemeral } = require('./utils/replies');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
 
-const BUILD_VERSION = '1.5.1-definitif';
+const BUILD_VERSION = '1.5.2-no-duplicate';
 let ready = false;
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));

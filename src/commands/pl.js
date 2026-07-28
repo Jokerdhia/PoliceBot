@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const config = require('../config');
 const database = require('../database');
 const { canUsePoliceCommands } = require('../utils/permissions');
@@ -119,12 +119,53 @@ module.exports = {
         );
       }
 
+      const confirmationEmbed = new EmbedBuilder()
+        .setColor(0x15803d)
+        .setAuthor({
+          name: `${interaction.guild.name.toUpperCase()} • PERSONNEL DIVISION`,
+          iconURL: interaction.guild.iconURL({ size: 128 }) || undefined
+        })
+        .setTitle('✅ PRÉ-INTÉGRATION RÉUSSIE')
+        .setDescription(`${updatedMember} a été placé dans les effectifs de pré-intégration.`)
+        .addFields(
+          {
+            name: '👮 RESPONSABLE DU RECRUTEMENT',
+            value: `${interaction.user}
+**Identifiant Discord :** \`${interaction.user.id}\``,
+            inline: true
+          },
+          {
+            name: '🛡️ NOUVEL OFFICIER',
+            value: `${updatedMember}
+**Identifiant Discord :** \`${updatedMember.id}\``,
+            inline: true
+          },
+          {
+            name: '🔄 MODIFICATIONS DES RÔLES',
+            value: [
+              `**Ajoutés :** <@&${config.roles.police}> • <@&${config.roles.academy}>`,
+              `**Retirés :** <@&${config.roles.citizen}>${config.roles.acceptedCv ? ` • <@&${config.roles.acceptedCv}>` : ''}`
+            ].join('\n'),
+            inline: false
+          },
+          {
+            name: '📨 PROCHAINE ÉTAPE',
+            value: [
+              'Le membre a été tagué dans le salon d’intégration.',
+              'Aucun badge n’a encore été créé et son pseudo reste inchangé.',
+              'Le badge sera attribué après le formulaire **Demander mon badge**.'
+            ].join('\n'),
+            inline: false
+          }
+        )
+        .setThumbnail(updatedMember.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: `${interaction.guild.name} • Pré-intégration du personnel` })
+        .setTimestamp();
+
       return replyEphemeral(
         interaction,
-        `✅ ${updatedMember} a été placé en **Police** et **Academy**.\n` +
-        '✅ **Citizen** et **Accepted CV Police** ont été retirés.\n' +
-        '📨 Le membre a été tagué dans le salon d’intégration.\n' +
-        '⏳ Aucun badge n’a été créé et son pseudo Discord reste inchangé. Le badge sera attribué uniquement après le formulaire **Demander mon badge**.'
+        { embeds: [confirmationEmbed] },
+        10000
       );
     } catch (error) {
       console.error('Erreur /pl :', error);
