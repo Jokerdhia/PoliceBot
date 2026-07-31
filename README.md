@@ -37,3 +37,9 @@ Ne publie jamais `.env`, `DISCORD_TOKEN` ou `DATABASE_URL` sur GitHub.
 - Après `/pl`, le bot mentionne le membre dans `ONBOARDING_CHANNEL_ID` avec le bouton **Demander mon badge**.
 - Le membre saisit un nom RP complet, par exemple `Jean Smith`.
 - Le bot attribue alors un badge libre et modifie le pseudo en `[badge] Jean Smith`.
+
+
+## Mise à jour 1.5.3
+- Panneau et formulaire de demande de badge traduits en arabe.
+- Le badge 106 est réservé et ne peut être attribué automatiquement ni via /bg.
+- Le fichier .env est exclu du ZIP; utilisez .env.example ou les variables Render.

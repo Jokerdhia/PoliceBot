@@ -38,5 +38,5 @@ module.exports = Object.freeze({
     kickLogs: process.env.KICK_LOG_CHANNEL_ID,
     onboarding: process.env.ONBOARDING_CHANNEL_ID
   }),
-  badge: Object.freeze({ min: 100, max: 300 })
+  badge: Object.freeze({ min: 100, max: 300, reserved: Object.freeze([106]) })
 });

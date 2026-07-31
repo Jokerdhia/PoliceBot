@@ -102,11 +102,15 @@ async function findByBadge(badge) {
   const result = await pool.query('SELECT * FROM officers WHERE badge=$1 LIMIT 1', [badge]);
   return mapOfficer(result.rows[0]);
 }
-async function getRandomAvailableBadge(minBadge, maxBadge) {
+async function getRandomAvailableBadge(minBadge, maxBadge, reservedBadges = []) {
   const result = await pool.query(
     `SELECT candidate AS badge FROM generate_series($1::int,$2::int) candidate
-     LEFT JOIN officers ON officers.badge=candidate WHERE officers.badge IS NULL
-     ORDER BY RANDOM() LIMIT 1`, [minBadge, maxBadge]);
+     LEFT JOIN officers ON officers.badge=candidate
+     WHERE officers.badge IS NULL
+       AND NOT (candidate = ANY($3::int[]))
+     ORDER BY RANDOM() LIMIT 1`,
+    [minBadge, maxBadge, reservedBadges]
+  );
   return result.rows[0]?.badge ?? null;
 }
 async function addOfficer(officer) {

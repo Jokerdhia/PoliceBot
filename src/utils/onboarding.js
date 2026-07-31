@@ -23,23 +23,23 @@ function onboardingEmbed(member) {
   return new EmbedBuilder()
     .setColor(0x1d4ed8)
     .setAuthor({
-      name: `${member.guild.name.toUpperCase()} • POLICE DEPARTMENT`,
+      name: `${member.guild.name.toUpperCase()} • إدارة الشرطة`,
       iconURL: member.guild.iconURL({ size: 128 }) || undefined
     })
-    .setTitle('🪪 DEMANDE DE BADGE POLICE')
+    .setTitle('🪪 طلب شارة الشرطة')
     .setDescription([
-      `${member}, tes rôles **Police** et **Academy** sont actifs.`,
+      `${member}، تم تفعيل رتبتي **Police** و **Academy** الخاصة بك.`,
       '',
-      'Pour recevoir ton badge, clique sur le bouton ci-dessous et renseigne ton **prénom et nom RP complet**.',
-      'Ton pseudo Discord sera modifié seulement après validation du formulaire.'
+      'لاستلام شارتك، اضغط على الزر الموجود بالأسفل ثم أدخل **اسمك الأول واسم العائلة داخل الرول بلاي بشكل كامل**.',
+      'سيتم تغيير اسمك في ديسكورد فقط بعد إرسال النموذج واعتماده بنجاح.'
     ].join('\n'))
     .addFields({
-      name: '📌 Format attendu',
+      name: '📌 الصيغة المطلوبة',
       value: '`Jean Smith`',
       inline: false
     })
     .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-    .setFooter({ text: 'Seul le membre mentionné peut remplir cette demande.' })
+    .setFooter({ text: 'يمكن للعضو المذكور فقط تعبئة هذا الطلب.' })
     .setTimestamp();
 }
 
@@ -47,7 +47,7 @@ function onboardingButton(memberId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`${BUTTON_PREFIX}${memberId}`)
-      .setLabel('Demander mon badge')
+      .setLabel('طلب شارة الشرطة')
       .setEmoji('🪪')
       .setStyle(ButtonStyle.Primary)
   );
@@ -171,35 +171,35 @@ async function handleOnboardingButton(interaction) {
 
   const targetId = interaction.customId.slice(BUTTON_PREFIX.length);
   if (interaction.user.id !== targetId) {
-    await replyEphemeral(interaction, '❌ Cette demande de badge appartient à un autre membre.', 7000);
+    await replyEphemeral(interaction, '❌ طلب الشارة هذا يخص عضوًا آخر.', 7000);
     return true;
   }
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member || !member.roles.cache.has(config.roles.academy) || !member.roles.cache.has(config.roles.police)) {
-    await replyEphemeral(interaction, '❌ Les rôles **Police** et **Academy** sont requis pour demander un badge.', 8000);
+    await replyEphemeral(interaction, '❌ يجب أن تمتلك رتبتي **Police** و **Academy** لطلب الشارة.', 8000);
     return true;
   }
 
   const existingOfficer = await database.findByUserId(member.id);
   if (existingOfficer) {
-    await replyEphemeral(interaction, `❌ Tu possèdes déjà le badge **${existingOfficer.badge}**.`, 8000);
+    await replyEphemeral(interaction, `❌ لديك بالفعل الشارة رقم **${existingOfficer.badge}**.`, 8000);
     return true;
   }
 
   if (!(await database.isOnboardingPending(member.id))) {
-    await replyEphemeral(interaction, '❌ Aucune demande de badge active. Demande au Recruitment de refaire **/pl**.', 9000);
+    await replyEphemeral(interaction, '❌ لا يوجد طلب شارة نشط. اطلب من مسؤول التوظيف استخدام الأمر **/pl** من جديد.', 9000);
     return true;
   }
 
   const modal = new ModalBuilder()
     .setCustomId(`${MODAL_PREFIX}${targetId}`)
-    .setTitle('Demande de badge Police');
+    .setTitle('طلب شارة الشرطة');
 
   const fullName = new TextInputBuilder()
     .setCustomId('full_name')
-    .setLabel('Prénom et nom RP')
-    .setPlaceholder('Exemple : Jean Smith')
+    .setLabel('الاسم الأول واسم العائلة RP')
+    .setPlaceholder('مثال: Jean Smith')
     .setStyle(TextInputStyle.Short)
     .setMinLength(3)
     .setMaxLength(25)
@@ -231,7 +231,7 @@ async function handleOnboardingModal(interaction) {
 
   const targetId = interaction.customId.slice(MODAL_PREFIX.length);
   if (interaction.user.id !== targetId) {
-    await replyEphemeral(interaction, '❌ Ce formulaire ne t’appartient pas.', 7000);
+    await replyEphemeral(interaction, '❌ هذا النموذج لا يخصك.', 7000);
     return true;
   }
 
@@ -239,24 +239,24 @@ async function handleOnboardingModal(interaction) {
 
   const member = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!member) {
-    await replyEphemeral(interaction, '❌ Ton compte est introuvable sur ce serveur.', 7000);
+    await replyEphemeral(interaction, '❌ تعذر العثور على حسابك داخل السيرفر.', 7000);
     return true;
   }
 
   if (!member.roles.cache.has(config.roles.police) || !member.roles.cache.has(config.roles.academy)) {
-    await replyEphemeral(interaction, '❌ Les rôles **Police** et **Academy** sont requis.', 8000);
+    await replyEphemeral(interaction, '❌ يجب أن تمتلك رتبتي **Police** و **Academy**.', 8000);
     return true;
   }
 
   const existingOfficer = await database.findByUserId(member.id);
   if (existingOfficer) {
-    await replyEphemeral(interaction, `❌ Tu possèdes déjà le badge **${existingOfficer.badge}**.`, 8000);
+    await replyEphemeral(interaction, `❌ لديك بالفعل الشارة رقم **${existingOfficer.badge}**.`, 8000);
     return true;
   }
 
   const pendingRequest = await database.getOnboardingPending(member.id);
   if (!pendingRequest) {
-    await replyEphemeral(interaction, '❌ Cette demande a expiré ou n’est pas active. Demande au Recruitment de refaire **/pl**.', 9000);
+    await replyEphemeral(interaction, '❌ انتهت صلاحية هذا الطلب أو لم يعد نشطًا. اطلب من مسؤول التوظيف استخدام **/pl** من جديد.', 9000);
     return true;
   }
 
@@ -269,7 +269,7 @@ async function handleOnboardingModal(interaction) {
 
   const rpName = interaction.fields.getTextInputValue('full_name').trim().replace(/\s+/g, ' ');
   if (!/^[\p{L}][\p{L}'’ -]{1,23}[\p{L}]$/u.test(rpName) || !rpName.includes(' ')) {
-    await replyEphemeral(interaction, '❌ Entre un prénom et un nom RP valides, par exemple **Jean Smith**.', 9000);
+    await replyEphemeral(interaction, '❌ أدخل اسمًا أول واسم عائلة صالحين داخل RP، مثل **Jean Smith**.', 9000);
     return true;
   }
 
@@ -278,29 +278,29 @@ async function handleOnboardingModal(interaction) {
     reason: error.message
   }));
   if (!blacklistResult.ok) {
-    await replyEphemeral(interaction, '❌ Impossible de vérifier la Blacklist. Contacte le Recruitment.', 9000);
+    await replyEphemeral(interaction, '❌ تعذر التحقق من القائمة السوداء. تواصل مع مسؤول التوظيف.', 9000);
     return true;
   }
   if (blacklistResult.blacklisted) {
-    await replyEphemeral(interaction, '⛔ Demande refusée : ton compte figure dans la Blacklist.', 10000);
+    await replyEphemeral(interaction, '⛔ تم رفض الطلب: حسابك موجود في القائمة السوداء.', 10000);
     return true;
   }
 
   const botMember = interaction.guild.members.me;
   if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames) || !member.manageable) {
-    await replyEphemeral(interaction, '❌ Le bot ne peut pas modifier ton pseudo. Vérifie la hiérarchie des rôles.', 10000);
+    await replyEphemeral(interaction, '❌ لا يستطيع البوت تغيير اسمك. تحقق من ترتيب الرتب وصلاحيات البوت.', 10000);
     return true;
   }
 
-  const badge = await database.getRandomAvailableBadge(config.badge.min, config.badge.max);
+  const badge = await database.getRandomAvailableBadge(config.badge.min, config.badge.max, config.badge.reserved);
   if (badge === null) {
-    await replyEphemeral(interaction, '❌ Aucun badge n’est actuellement disponible.', 9000);
+    await replyEphemeral(interaction, '❌ لا توجد أي شارة متاحة حاليًا.', 9000);
     return true;
   }
 
   const policeNickname = `[${badge}] ${rpName}`;
   if (policeNickname.length > 32) {
-    await replyEphemeral(interaction, '❌ Le nom RP est trop long pour le pseudo Discord.', 8000);
+    await replyEphemeral(interaction, '❌ اسم RP طويل جدًا ولا يمكن استخدامه كاسم في ديسكورد.', 8000);
     return true;
   }
 
@@ -330,14 +330,14 @@ async function handleOnboardingModal(interaction) {
 
     await replyEphemeral(
       interaction,
-      `✅ Ton badge **${badge}** a été attribué. Ton pseudo est maintenant **${policeNickname}**.`,
+      `✅ تم منحك الشارة رقم **${badge}**. اسمك الجديد هو **${policeNickname}**.`,
       10000
     );
   } catch (error) {
     console.error('Erreur demande de badge :', error);
     if (officerCreated) await database.removeOfficer(member.id).catch(() => null);
     if (nicknameChanged) await member.setNickname(originalNickname).catch(() => null);
-    await replyEphemeral(interaction, `❌ La demande de badge a échoué : ${error.message}`, 10000);
+    await replyEphemeral(interaction, `❌ فشل طلب الشارة: ${error.message}`, 10000);
   }
 
   return true;
