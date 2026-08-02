@@ -4,13 +4,13 @@ const config = require('./config');
 const database = require('./database');
 const commands = [
   require('./commands/pl'), require('./commands/kick'),
-  require('./commands/bg'), require('./commands/rc'), require('./commands/ac'), require('./commands/rf')
+  require('./commands/bg'), require('./commands/rc'), require('./commands/ac'), require('./commands/rf'), require('./commands/unrf')
 ];
 const { replyEphemeral } = require('./utils/replies');
 const { checkRefusedCv } = require('./utils/refusedCv');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
 
-const BUILD_VERSION = '1.6.0-refused-cv';
+const BUILD_VERSION = '1.6.1-unrf';
 let ready = false;
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));

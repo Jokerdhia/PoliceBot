@@ -258,6 +258,14 @@ async function isCvRefused(userId) {
   return result.rowCount > 0;
 }
 
+async function unrefuseCv(userId) {
+  const result = await pool.query(
+    'DELETE FROM refused_cv WHERE user_id=$1 RETURNING user_id, reason, refused_by, refused_at',
+    [userId]
+  );
+  return result.rows[0] || null;
+}
+
 async function close() { await pool.end(); }
 
-module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, refuseCv, getRefusedCv, isCvRefused, close };
+module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, refuseCv, getRefusedCv, isCvRefused, unrefuseCv, close };
