@@ -4,6 +4,7 @@ const database = require('../database');
 const { canUsePoliceCommands } = require('../utils/permissions');
 const { checkBlacklist } = require('../utils/blacklist');
 const { replyEphemeral } = require('../utils/replies');
+const { checkRefusedCv } = require('../utils/refusedCv');
 
 function normalizeRoleName(name) {
   return String(name || '')
@@ -60,6 +61,15 @@ module.exports = {
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     if (!member) {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
+    }
+
+    const refusedCv = await checkRefusedCv(interaction.guild, member.id);
+    if (refusedCv.refused) {
+      return replyEphemeral(
+        interaction,
+        `⛔ Action bloquée : ${member} figure dans les **CV Police refusés**.${refusedCv.reason ? `\nRaison : **${refusedCv.reason}**` : ''}`,
+        10000
+      );
     }
 
     const existingOfficer = await database.findByUserId(member.id);

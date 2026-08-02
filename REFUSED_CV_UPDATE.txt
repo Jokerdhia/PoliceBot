@@ -1,0 +1,28 @@
+MISE A JOUR REFUSED CV POLICE
+============================
+
+Salons configurés :
+- REFUSED CV : 1533426172803944579
+- CV POLICE  : 1528151509412479093
+
+Nouvelle commande :
+/rf membre:@joueur raison:motif
+
+Fonctionnement :
+- Seul le rôle Recruitment peut utiliser /rf.
+- /rf enregistre le Discord ID du joueur dans Neon PostgreSQL.
+- Le bot mentionne le joueur dans le salon REFUSED CV avec la raison et le recruteur.
+- Un joueur présent dans la base OU mentionné dans le salon REFUSED CV est considéré refusé.
+- Si ce joueur poste dans le salon CV POLICE (ou un thread enfant), le message est supprimé automatiquement.
+- /ac et /pl sont également bloqués pour un joueur refusé.
+
+Permissions nécessaires dans le salon CV :
+- Voir le salon
+- Voir les anciens messages
+- Gérer les messages
+- Envoyer des messages (pour l'avertissement temporaire)
+
+Après déploiement du code, exécuter une fois :
+npm run deploy
+
+Cela publie la nouvelle commande /rf sur le serveur Discord configuré.

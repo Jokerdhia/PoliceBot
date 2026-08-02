@@ -51,6 +51,14 @@ async function initializeDatabase() {
       requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS refused_cv (
+      user_id TEXT PRIMARY KEY,
+      reason TEXT NOT NULL,
+      refused_by TEXT NOT NULL,
+      refused_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
   await migrateJsonIfNeeded();
   console.log('✅ Base de données Neon connectée et prête.');
 }
@@ -224,6 +232,32 @@ async function clearOnboardingPending(userId) {
   await pool.query('DELETE FROM onboarding_pending WHERE user_id=$1', [userId]);
 }
 
+
+async function refuseCv(userId, reason, refusedBy) {
+  const result = await pool.query(
+    `INSERT INTO refused_cv (user_id, reason, refused_by, refused_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (user_id) DO UPDATE
+     SET reason=EXCLUDED.reason, refused_by=EXCLUDED.refused_by, refused_at=NOW()
+     RETURNING user_id, reason, refused_by, refused_at`,
+    [userId, reason, refusedBy]
+  );
+  return result.rows[0];
+}
+
+async function getRefusedCv(userId) {
+  const result = await pool.query(
+    'SELECT user_id, reason, refused_by, refused_at FROM refused_cv WHERE user_id=$1 LIMIT 1',
+    [userId]
+  );
+  return result.rows[0] || null;
+}
+
+async function isCvRefused(userId) {
+  const result = await pool.query('SELECT 1 FROM refused_cv WHERE user_id=$1 LIMIT 1', [userId]);
+  return result.rowCount > 0;
+}
+
 async function close() { await pool.end(); }
 
-module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, close };
+module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, refuseCv, getRefusedCv, isCvRefused, close };
