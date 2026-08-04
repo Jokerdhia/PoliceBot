@@ -59,6 +59,22 @@ async function initializeDatabase() {
       rejected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rejected_cv_history (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      rejected_by TEXT NOT NULL,
+      rejection_reason TEXT NOT NULL,
+      rejected_at TIMESTAMPTZ NOT NULL,
+      unrejected_by TEXT NOT NULL,
+      unrejection_reason TEXT NOT NULL,
+      unrejected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS rejected_cv_history_user_id_idx
+    ON rejected_cv_history (user_id, unrejected_at DESC)
+  `);
   await migrateJsonIfNeeded();
   console.log('✅ Base de données Neon connectée et prête.');
 }
@@ -258,9 +274,36 @@ async function isCvRejected(userId) {
   return result.rowCount > 0;
 }
 
-async function unrejectCv(userId) {
-  const result = await pool.query('DELETE FROM rejected_cv WHERE user_id=$1 RETURNING user_id', [userId]);
-  return result.rowCount > 0;
+async function unrejectCv(userId, unrejectedBy, unrejectionReason) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query(
+      `SELECT user_id, rejected_by, reason, rejected_at
+       FROM rejected_cv WHERE user_id=$1 FOR UPDATE`,
+      [userId]
+    );
+    if (!current.rowCount) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    const row = current.rows[0];
+    await client.query(
+      `INSERT INTO rejected_cv_history
+       (user_id, rejected_by, rejection_reason, rejected_at, unrejected_by, unrejection_reason, unrejected_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+      [row.user_id, row.rejected_by, row.reason, row.rejected_at, unrejectedBy, unrejectionReason]
+    );
+    await client.query('DELETE FROM rejected_cv WHERE user_id=$1', [userId]);
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function close() { await pool.end(); }
