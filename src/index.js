@@ -10,7 +10,7 @@ const commands = [
 const { replyEphemeral } = require('./utils/replies');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
 
-const BUILD_VERSION = '1.6.4-refused-cv-channel-env';
+const BUILD_VERSION = '1.6.5-pl-rejected-cv-guard';
 let ready = false;
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));

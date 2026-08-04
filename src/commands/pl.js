@@ -45,6 +45,29 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
     }
 
+    // /pl doit être bloqué tant qu'un refus CV est actif.
+    // /unrf supprime cet enregistrement et réautorise ensuite /ac puis /pl.
+    let rejectedCv;
+    try {
+      rejectedCv = await database.getRejectedCv(member.id);
+    } catch (error) {
+      console.error('Erreur de vérification des CV refusés dans /pl :', error);
+      return replyEphemeral(
+        interaction,
+        '❌ Intégration bloquée : impossible de vérifier les **CV Police refusés**.',
+        10000
+      );
+    }
+
+    if (rejectedCv) {
+      return replyEphemeral(
+        interaction,
+        `⛔ Action bloquée : ${member} figure dans les **CV Police refusés**.\n` +
+          'Utilise d’abord **/unrf**, puis **/ac**, avant de lancer **/pl**.',
+        10000
+      );
+    }
+
     let blacklistResult;
     try {
       blacklistResult = await checkBlacklist(interaction.guild, member.id);

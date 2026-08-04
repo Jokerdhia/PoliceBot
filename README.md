@@ -54,3 +54,9 @@ Ne publie jamais `.env`, `DISCORD_TOKEN` ou `DATABASE_URL` sur GitHub.
 ## Logs des refus
 
 Ajoutez `REFUSAL_LOG_CHANNEL_ID` dans Render avec l’identifiant du salon réservé aux refus de CV. Les commandes `/rf` et `/unrf` utilisent ce salon. Si cette variable est absente, elles utilisent `KICK_LOG_CHANNEL_ID` et n’envoient plus rien dans `ACCEPTANCE_LOG_CHANNEL_ID`.
+
+
+## Correctif 1.6.5
+- `/pl` vérifie maintenant la table `rejected_cv`.
+- Un joueur refusé ne peut plus recevoir Police/Academy tant que `/unrf` n'a pas été exécuté.
+- Flux obligatoire : `/unrf` → `/ac` → `/pl`.
