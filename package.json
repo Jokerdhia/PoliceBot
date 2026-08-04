@@ -1,6 +1,6 @@
 {
   "name": "police-bot-discord",
-  "version": "1.5.3",
+  "version": "1.6.2",
   "description": "Bot Discord police : /ac Accepted CV, /pl rôles uniquement, badge exclusivement après formulaire onboarding.",
   "main": "src/index.js",
   "type": "commonjs",

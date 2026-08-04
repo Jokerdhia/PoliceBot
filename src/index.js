@@ -1,18 +1,18 @@
 const http = require('node:http');
-const { Client, Collection, Events, GatewayIntentBits, PermissionFlagsBits } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 const config = require('./config');
 const database = require('./database');
 const commands = [
   require('./commands/pl'), require('./commands/kick'),
-  require('./commands/bg'), require('./commands/rc'), require('./commands/ac'), require('./commands/rf'), require('./commands/unrf')
+  require('./commands/bg'), require('./commands/rc'), require('./commands/ac'),
+  require('./commands/rf'), require('./commands/unrf')
 ];
 const { replyEphemeral } = require('./utils/replies');
-const { checkRefusedCv } = require('./utils/refusedCv');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
 
-const BUILD_VERSION = '1.6.1-unrf';
+const BUILD_VERSION = '1.6.2-refusal-role-cleanup';
 let ready = false;
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));
 
 const server = http.createServer(async (request, response) => {
@@ -52,43 +52,6 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log('ℹ️ Scan automatique au démarrage désactivé pour éviter les anciens panneaux et les doublons.');
 });
 client.on(Events.GuildMemberUpdate, handleAcceptedRole);
-client.on(Events.MessageCreate, async (message) => {
-  try {
-    if (!message.guild || message.author.bot) return;
-
-    const isCvChannel =
-      message.channel.id === config.channels.cvPolice ||
-      message.channel.parentId === config.channels.cvPolice;
-
-    if (!isCvChannel) return;
-
-    const refused = await checkRefusedCv(message.guild, message.author.id);
-    if (!refused.refused) return;
-
-    const me = message.guild.members.me;
-    const permissions = message.channel.permissionsFor(me);
-    if (!permissions?.has(PermissionFlagsBits.ManageMessages)) {
-      console.error(`❌ Impossible de supprimer le CV refusé de ${message.author.id}: permission Gérer les messages manquante.`);
-      return;
-    }
-
-    await message.delete().catch((error) => {
-      throw new Error(`suppression impossible: ${error.message}`);
-    });
-
-    if (permissions?.has(PermissionFlagsBits.SendMessages) || permissions?.has(PermissionFlagsBits.SendMessagesInThreads)) {
-      const warning = await message.channel.send({
-        content: `⛔ <@${message.author.id}>, ton **CV Police est actuellement refusé**. Tu ne peux pas déposer une nouvelle candidature.`
-      }).catch(() => null);
-
-      if (warning) {
-        setTimeout(() => warning.delete().catch(() => null), 10_000);
-      }
-    }
-  } catch (error) {
-    console.error('Erreur blocage CV refusé :', error);
-  }
-});
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (await handleOnboardingButton(interaction)) return;

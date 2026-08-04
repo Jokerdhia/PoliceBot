@@ -36,9 +36,7 @@ module.exports = Object.freeze({
     blacklist: process.env.BLACKLIST_CHANNEL_ID,
     acceptanceLogs: process.env.ACCEPTANCE_LOG_CHANNEL_ID,
     kickLogs: process.env.KICK_LOG_CHANNEL_ID,
-    onboarding: process.env.ONBOARDING_CHANNEL_ID,
-    refusedCv: process.env.REFUSED_CV_CHANNEL_ID || '1533426172803944579',
-    cvPolice: process.env.CV_POLICE_CHANNEL_ID || '1528151509412479093'
+    onboarding: process.env.ONBOARDING_CHANNEL_ID
   }),
   badge: Object.freeze({ min: 100, max: 300, reserved: Object.freeze([106]) })
 });

@@ -43,3 +43,9 @@ Ne publie jamais `.env`, `DISCORD_TOKEN` ou `DATABASE_URL` sur GitHub.
 - Panneau et formulaire de demande de badge traduits en arabe.
 - Le badge 106 est réservé et ne peut être attribué automatiquement ni via /bg.
 - Le fichier .env est exclu du ZIP; utilisez .env.example ou les variables Render.
+
+## Correction CV refusés (v1.6.0)
+- `/rf` enregistre le refus dans la table PostgreSQL `rejected_cv`.
+- `/unrf` supprime réellement l'enregistrement et vérifie la suppression.
+- `/ac` consulte exactement la même table, sans cache local : le déblocage est immédiat.
+- Après déploiement, exécuter `npm run deploy` une fois pour publier `/rf` et `/unrf`.

@@ -4,7 +4,6 @@ const database = require('../database');
 const { canUsePoliceCommands } = require('../utils/permissions');
 const { checkBlacklist } = require('../utils/blacklist');
 const { replyEphemeral } = require('../utils/replies');
-const { checkRefusedCv } = require('../utils/refusedCv');
 
 function normalizeRoleName(name) {
   return String(name || '')
@@ -63,18 +62,21 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
     }
 
-    const refusedCv = await checkRefusedCv(interaction.guild, member.id);
-    if (refusedCv.refused) {
-      return replyEphemeral(
-        interaction,
-        `⛔ Action bloquée : ${member} figure dans les **CV Police refusés**.${refusedCv.reason ? `\nRaison : **${refusedCv.reason}**` : ''}`,
-        10000
-      );
-    }
-
     const existingOfficer = await database.findByUserId(member.id);
     if (existingOfficer || member.roles.cache.has(config.roles.police)) {
       return replyEphemeral(interaction, '❌ Ce membre est déjà enregistré comme policier.', 8000);
+    }
+
+    // /rf et /unrf utilisent la même table PostgreSQL que /ac.
+    // Aucun cache local : un /unrf prend effet immédiatement, sans redémarrage.
+    const rejectedCv = await database.getRejectedCv(member.id);
+    if (rejectedCv) {
+      return replyEphemeral(
+        interaction,
+        `⛔ Action bloquée : ${member} figure dans les **CV Police refusés**.\n` +
+        `Utilise **/unrf membre:${member.user.username}** avant de l’accepter.`,
+        10000
+      );
     }
 
     const blacklistResult = await checkBlacklist(interaction.guild, member.id).catch((error) => ({

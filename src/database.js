@@ -52,11 +52,11 @@ async function initializeDatabase() {
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS refused_cv (
+    CREATE TABLE IF NOT EXISTS rejected_cv (
       user_id TEXT PRIMARY KEY,
+      rejected_by TEXT NOT NULL,
       reason TEXT NOT NULL,
-      refused_by TEXT NOT NULL,
-      refused_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      rejected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
   await migrateJsonIfNeeded();
@@ -233,39 +233,36 @@ async function clearOnboardingPending(userId) {
 }
 
 
-async function refuseCv(userId, reason, refusedBy) {
+async function rejectCv(userId, rejectedBy, reason) {
   const result = await pool.query(
-    `INSERT INTO refused_cv (user_id, reason, refused_by, refused_at)
+    `INSERT INTO rejected_cv (user_id, rejected_by, reason, rejected_at)
      VALUES ($1, $2, $3, NOW())
      ON CONFLICT (user_id) DO UPDATE
-     SET reason=EXCLUDED.reason, refused_by=EXCLUDED.refused_by, refused_at=NOW()
-     RETURNING user_id, reason, refused_by, refused_at`,
-    [userId, reason, refusedBy]
+     SET rejected_by=EXCLUDED.rejected_by, reason=EXCLUDED.reason, rejected_at=NOW()
+     RETURNING user_id, rejected_by, reason, rejected_at`,
+    [userId, rejectedBy, reason]
   );
   return result.rows[0];
 }
 
-async function getRefusedCv(userId) {
+async function getRejectedCv(userId) {
   const result = await pool.query(
-    'SELECT user_id, reason, refused_by, refused_at FROM refused_cv WHERE user_id=$1 LIMIT 1',
+    'SELECT user_id, rejected_by, reason, rejected_at FROM rejected_cv WHERE user_id=$1 LIMIT 1',
     [userId]
   );
   return result.rows[0] || null;
 }
 
-async function isCvRefused(userId) {
-  const result = await pool.query('SELECT 1 FROM refused_cv WHERE user_id=$1 LIMIT 1', [userId]);
+async function isCvRejected(userId) {
+  const result = await pool.query('SELECT 1 FROM rejected_cv WHERE user_id=$1 LIMIT 1', [userId]);
   return result.rowCount > 0;
 }
 
-async function unrefuseCv(userId) {
-  const result = await pool.query(
-    'DELETE FROM refused_cv WHERE user_id=$1 RETURNING user_id, reason, refused_by, refused_at',
-    [userId]
-  );
-  return result.rows[0] || null;
+async function unrejectCv(userId) {
+  const result = await pool.query('DELETE FROM rejected_cv WHERE user_id=$1 RETURNING user_id', [userId]);
+  return result.rowCount > 0;
 }
 
 async function close() { await pool.end(); }
 
-module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, refuseCv, getRefusedCv, isCvRefused, unrefuseCv, close };
+module.exports = { initializeDatabase, ping, findByUserId, findByBadge, getRandomAvailableBadge, addOfficer, updateBadge, updateRpName, removeOfficer, deleteAllPoliceData, setOnboardingPending, getOnboardingPending, isOnboardingPending, clearOnboardingPending, rejectCv, getRejectedCv, isCvRejected, unrejectCv, close };
