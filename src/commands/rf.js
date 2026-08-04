@@ -5,6 +5,7 @@ const { canUsePoliceCommands } = require('../utils/permissions');
 const { replyEphemeral } = require('../utils/replies');
 const { sendLog } = require('../utils/logs');
 const { removeAcceptedCvRoles } = require('../utils/roles');
+const { blockCvWriting } = require('../utils/cvChannelAccess');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -49,6 +50,17 @@ module.exports = {
 
     await database.rejectCv(member.id, interaction.user.id, reason);
 
+    try {
+      await blockCvWriting(member, `CV Police refusé par ${interaction.user.tag} : ${reason}`);
+    } catch (error) {
+      console.error('Erreur blocage écriture salon CV sur /rf :', error);
+      return replyEphemeral(
+        interaction,
+        `⚠️ Le refus a été enregistré, mais le joueur n’a pas pu être bloqué dans le salon CV Police : ${error.message}`,
+        14000
+      );
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0xdc2626)
       .setAuthor({ name: `${interaction.guild.name.toUpperCase()} • RECRUITMENT DIVISION`, iconURL: interaction.guild.iconURL({ size: 128 }) || undefined })
@@ -58,12 +70,12 @@ module.exports = {
         { name: '👤 CANDIDAT', value: `${member}\n**Discord ID :** \`${member.id}\``, inline: true },
         { name: '👮 RESPONSABLE', value: `${interaction.user}\n**Discord ID :** \`${interaction.user.id}\``, inline: true },
         { name: '📋 RAISON DU REFUS', value: reason, inline: false },
-        { name: '🚫 BLOCAGE', value: 'Toute nouvelle tentative de candidature sera automatiquement bloquée jusqu’à utilisation de **/unrf**.', inline: false }
+        { name: '🚫 BLOCAGE', value: 'Le joueur ne peut plus écrire ni créer de discussion dans le salon CV Police jusqu’à utilisation de **/unrf**.', inline: false }
       )
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setTimestamp();
 
     await sendLog(interaction.guild, config.channels.refusalLogs, embed);
-    return replyEphemeral(interaction, `✅ Le CV Police de ${member} a été refusé, le rôle **Accepted CV Police** a été retiré et le refus a été enregistré.`, 10000);
+    return replyEphemeral(interaction, `✅ Le CV Police de ${member} a été refusé, le rôle **Accepted CV Police** a été retiré et le refus a été enregistré et l’écriture dans le salon CV Police a été bloquée.`, 10000);
   }
 };

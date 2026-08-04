@@ -4,6 +4,8 @@ const database = require('../database');
 const { canUsePoliceCommands } = require('../utils/permissions');
 const { replyEphemeral } = require('../utils/replies');
 const { sendLog } = require('../utils/logs');
+const { checkBlacklist } = require('../utils/blacklist');
+const { restoreCvWriting, blockCvWriting } = require('../utils/cvChannelAccess');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -56,6 +58,32 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Le déblocage n’a pas été confirmé par la base de données. Réessaie.', 10000);
     }
 
+    const blacklistResult = await checkBlacklist(interaction.guild, member.id);
+    if (!blacklistResult.ok) {
+      // Sécurité : on conserve le blocage du salon si la blacklist ne peut pas être vérifiée.
+      await blockCvWriting(member, 'Vérification blacklist impossible après /unrf').catch(() => null);
+      return replyEphemeral(
+        interaction,
+        `⚠️ Le refus a été annulé, mais le salon CV reste bloqué car la blacklist n’a pas pu être vérifiée : ${blacklistResult.reason}`,
+        14000
+      );
+    }
+
+    if (blacklistResult.blacklisted) {
+      await blockCvWriting(member, 'Joueur toujours blacklisté après /unrf').catch(() => null);
+    } else {
+      try {
+        await restoreCvWriting(member, `Refus CV annulé par ${interaction.user.tag} : ${reason}`);
+      } catch (error) {
+        console.error('Erreur restauration écriture salon CV sur /unrf :', error);
+        return replyEphemeral(
+          interaction,
+          `⚠️ Le refus a été annulé, mais les permissions du salon CV Police n’ont pas pu être restaurées : ${error.message}`,
+          14000
+        );
+      }
+    }
+
     const oldReason = previousRejection.reason || 'Non renseignée';
     const embed = new EmbedBuilder()
       .setColor(0x22c55e)
@@ -64,13 +92,17 @@ module.exports = {
         iconURL: interaction.guild.iconURL({ size: 128 }) || undefined
       })
       .setTitle('✅ REFUS CV ANNULÉ')
-      .setDescription(`${member} peut désormais être accepté à nouveau avec **/ac**, puis intégré avec **/pl**.`)
+      .setDescription(blacklistResult.blacklisted
+        ? `${member} n’est plus refusé, mais reste **blacklisté** : il ne peut toujours pas écrire dans le salon CV Police.`
+        : `${member} peut de nouveau écrire dans le salon CV Police, être accepté avec **/ac**, puis intégré avec **/pl**.`)
       .addFields(
         { name: '👤 CANDIDAT', value: `${member}\n**Discord ID :** \`${member.id}\``, inline: true },
         { name: '👮 RESPONSABLE', value: `${interaction.user}\n**Discord ID :** \`${interaction.user.id}\``, inline: true },
         { name: '📝 RAISON DE L’ANNULATION', value: reason, inline: false },
         { name: '📋 ANCIENNE RAISON DU REFUS', value: oldReason.slice(0, 1024), inline: false },
-        { name: '🔓 NOUVEAU STATUT', value: 'Le blocage candidature a été retiré. Le rôle **Accepted CV Police** n’est pas ajouté automatiquement.', inline: false }
+        { name: '🔓 NOUVEAU STATUT', value: blacklistResult.blacklisted
+          ? 'Le refus est retiré, mais le blocage du salon reste actif car le joueur est blacklisté.'
+          : 'Le blocage du salon CV Police est retiré. Le rôle **Accepted CV Police** n’est pas ajouté automatiquement.', inline: false }
       )
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setFooter({ text: 'Une trace de cette annulation est conservée dans la base de données.' })
@@ -79,7 +111,9 @@ module.exports = {
     await sendLog(interaction.guild, config.channels.refusalLogs, embed);
     return replyEphemeral(
       interaction,
-      `✅ Refus annulé pour ${member}. **Raison :** ${reason}\nTu peux maintenant utiliser **/ac**, puis **/pl**.`,
+      blacklistResult.blacklisted
+        ? `⚠️ Refus annulé pour ${member}, mais le joueur reste blacklisté et ne peut pas écrire dans le salon CV Police.`
+        : `✅ Refus annulé pour ${member}. **Raison :** ${reason}\nLe joueur peut de nouveau écrire dans le salon CV Police. Tu peux maintenant utiliser **/ac**, puis **/pl**.`,
       11000
     );
   }

@@ -9,10 +9,17 @@ const commands = [
 ];
 const { replyEphemeral } = require('./utils/replies');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
+const { checkBlacklist } = require('./utils/blacklist');
+const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 
-const BUILD_VERSION = '1.6.6-unrf-reason-audit';
+const BUILD_VERSION = '1.6.7-cv-channel-protection';
 let ready = false;
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] });
+const client = new Client({ intents: [
+  GatewayIntentBits.Guilds,
+  GatewayIntentBits.GuildMembers,
+  GatewayIntentBits.GuildMessages,
+  GatewayIntentBits.MessageContent
+] });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));
 
 const server = http.createServer(async (request, response) => {
@@ -50,8 +57,54 @@ client.once(Events.ClientReady, async (readyClient) => {
   const configuredAcceptedRole = await guild.roles.fetch(config.roles.acceptedCv).catch(() => null);
   console.log(`ℹ️ Rôle Accepted CV configuré : ${configuredAcceptedRole ? `${configuredAcceptedRole.name} (${configuredAcceptedRole.id})` : 'introuvable'}`);
   console.log('ℹ️ Scan automatique au démarrage désactivé pour éviter les anciens panneaux et les doublons.');
+  if (config.channels.cvPolice) {
+    const cvChannel = await guild.channels.fetch(config.channels.cvPolice).catch(() => null);
+    console.log(`ℹ️ Salon CV Police protégé : ${cvChannel ? `${cvChannel.name} (${cvChannel.id})` : 'introuvable'}`);
+  } else {
+    console.warn('⚠️ CV_POLICE_CHANNEL_ID absent : la protection du salon CV Police est désactivée.');
+  }
 });
 client.on(Events.GuildMemberUpdate, handleAcceptedRole);
+
+client.on(Events.MessageCreate, async (message) => {
+  if (!message.guild || message.author.bot || !isCvChannel(message.channel)) return;
+
+  try {
+    const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+    if (!member) return;
+
+    const rejected = await database.isCvRejected(member.id);
+    const blacklistResult = await checkBlacklist(message.guild, member.id);
+    const verificationFailed = !blacklistResult.ok;
+    const blacklisted = blacklistResult.ok && blacklistResult.blacklisted;
+
+    if (!rejected && !blacklisted && !verificationFailed) return;
+
+    await message.delete().catch(() => null);
+
+    const blockReason = rejected
+      ? 'CV Police refusé'
+      : blacklisted
+        ? 'Joueur blacklisté Police'
+        : 'Vérification blacklist impossible';
+
+    await blockCvWriting(member, blockReason).catch((error) => {
+      console.error(`Impossible de bloquer ${member.user.tag} dans le salon CV Police :`, error);
+    });
+
+    const explanation = rejected
+      ? 'Votre candidature Police a été refusée. Vous ne pouvez pas écrire ici tant que le refus n’est pas annulé.'
+      : blacklisted
+        ? 'Vous êtes blacklisté du recrutement Police et ne pouvez pas écrire dans ce salon.'
+        : 'Votre message a été retiré car la vérification de la blacklist est momentanément indisponible.';
+
+    await member.send(`🚫 **Accès au salon CV Police bloqué**
+${explanation}`).catch(() => null);
+  } catch (error) {
+    console.error('Erreur protection salon CV Police :', error);
+  }
+});
+
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (await handleOnboardingButton(interaction)) return;

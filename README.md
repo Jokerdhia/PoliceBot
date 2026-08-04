@@ -60,3 +60,19 @@ Ajoutez `REFUSAL_LOG_CHANNEL_ID` dans Render avec l’identifiant du salon rése
 - `/pl` vérifie maintenant la table `rejected_cv`.
 - Un joueur refusé ne peut plus recevoir Police/Academy tant que `/unrf` n'a pas été exécuté.
 - Flux obligatoire : `/unrf` → `/ac` → `/pl`.
+
+
+## Protection du salon CV Police — v1.6.7
+
+Ajoutez sur Render :
+
+```env
+CV_POLICE_CHANNEL_ID=ID_DU_SALON_CV_POLICE
+```
+
+Le bot doit avoir les permissions **Gérer les salons**, **Gérer les messages**, **Voir le salon** et **Voir les anciens messages**.
+
+- `/rf` retire Accepted CV Police et bloque immédiatement l’écriture, les réactions et la création de fils dans le salon CV Police.
+- `/unrf` restaure les permissions héritées uniquement si le joueur n’est pas blacklisté.
+- Un joueur refusé ou blacklisté qui tente d’écrire voit son message supprimé, reçoit un message privé et reste bloqué.
+- Si la blacklist ne peut pas être vérifiée, le bot bloque par sécurité.
