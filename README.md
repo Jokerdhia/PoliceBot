@@ -49,3 +49,8 @@ Ne publie jamais `.env`, `DISCORD_TOKEN` ou `DATABASE_URL` sur GitHub.
 - `/unrf` supprime réellement l'enregistrement et vérifie la suppression.
 - `/ac` consulte exactement la même table, sans cache local : le déblocage est immédiat.
 - Après déploiement, exécuter `npm run deploy` une fois pour publier `/rf` et `/unrf`.
+
+
+## Logs des refus
+
+Ajoutez `REFUSAL_LOG_CHANNEL_ID` dans Render avec l’identifiant du salon réservé aux refus de CV. Les commandes `/rf` et `/unrf` utilisent ce salon. Si cette variable est absente, elles utilisent `KICK_LOG_CHANNEL_ID` et n’envoient plus rien dans `ACCEPTANCE_LOG_CHANNEL_ID`.

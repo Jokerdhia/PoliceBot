@@ -35,6 +35,8 @@ module.exports = Object.freeze({
   channels: Object.freeze({
     blacklist: process.env.BLACKLIST_CHANNEL_ID,
     acceptanceLogs: process.env.ACCEPTANCE_LOG_CHANNEL_ID,
+    // Salon dédié aux refus. S'il n'est pas configuré, utilise les logs de kick, jamais le salon d'acceptation.
+    refusalLogs: process.env.REFUSED_CV_CHANNEL_ID || process.env.REFUSAL_LOG_CHANNEL_ID || process.env.KICK_LOG_CHANNEL_ID,
     kickLogs: process.env.KICK_LOG_CHANNEL_ID,
     onboarding: process.env.ONBOARDING_CHANNEL_ID
   }),

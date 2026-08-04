@@ -63,7 +63,7 @@ module.exports = {
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setTimestamp();
 
-    await sendLog(interaction.guild, config.channels.acceptanceLogs, embed);
+    await sendLog(interaction.guild, config.channels.refusalLogs, embed);
     return replyEphemeral(interaction, `✅ Le CV Police de ${member} a été refusé, le rôle **Accepted CV Police** a été retiré et le refus a été enregistré.`, 10000);
   }
 };

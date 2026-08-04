@@ -42,7 +42,7 @@ module.exports = {
       )
       .setTimestamp();
 
-    await sendLog(interaction.guild, config.channels.acceptanceLogs, embed);
+    await sendLog(interaction.guild, config.channels.refusalLogs, embed);
     return replyEphemeral(interaction, `✅ Refus annulé : ${member} peut maintenant être accepté avec **/ac**.`, 9000);
   }
 };
