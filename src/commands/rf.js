@@ -50,15 +50,12 @@ module.exports = {
 
     await database.rejectCv(member.id, interaction.user.id, reason);
 
+    let accessWarning = null;
     try {
       await blockCvWriting(member, `CV Police refusé par ${interaction.user.tag} : ${reason}`);
     } catch (error) {
+      accessWarning = error.message;
       console.error('Erreur blocage écriture salon CV sur /rf :', error);
-      return replyEphemeral(
-        interaction,
-        `⚠️ Le refus a été enregistré, mais le joueur n’a pas pu être bloqué dans le salon CV Police : ${error.message}`,
-        14000
-      );
     }
 
     const embed = new EmbedBuilder()
@@ -70,12 +67,24 @@ module.exports = {
         { name: '👤 CANDIDAT', value: `${member}\n**Discord ID :** \`${member.id}\``, inline: true },
         { name: '👮 RESPONSABLE', value: `${interaction.user}\n**Discord ID :** \`${interaction.user.id}\``, inline: true },
         { name: '📋 RAISON DU REFUS', value: reason, inline: false },
-        { name: '🚫 BLOCAGE', value: 'Le joueur ne peut plus écrire ni créer de discussion dans le salon CV Police jusqu’à utilisation de **/unrf**.', inline: false }
+        { name: '🚫 BLOCAGE', value: accessWarning
+          ? `⚠️ Le refus est enregistré, mais le blocage du salon a échoué : ${accessWarning}`.slice(0, 1024)
+          : 'Le joueur ne peut plus écrire ni créer de discussion dans le salon CV Police jusqu’à utilisation de **/unrf**.', inline: false }
       )
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setTimestamp();
 
-    await sendLog(interaction.guild, config.channels.refusalLogs, embed);
-    return replyEphemeral(interaction, `✅ Le CV Police de ${member} a été refusé, le rôle **Accepted CV Police** a été retiré et le refus a été enregistré et l’écriture dans le salon CV Police a été bloquée.`, 10000);
+    const logResult = await sendLog(interaction.guild, config.channels.refusalLogs, embed, 'REFUSED CV (/rf)');
+    const warnings = [];
+    if (accessWarning) warnings.push(`blocage du salon CV impossible : ${accessWarning}`);
+    if (!logResult.ok) warnings.push(`log refus non envoyé : ${logResult.reason}`);
+
+    return replyEphemeral(
+      interaction,
+      warnings.length
+        ? `⚠️ Le CV de ${member} est bien refusé et son rôle **Accepted CV Police** a été retiré.\nProblème(s) secondaire(s) : ${warnings.join(' • ')}`
+        : `✅ Le CV Police de ${member} a été refusé, le rôle **Accepted CV Police** a été retiré, le salon CV a été bloqué et le log a été envoyé.`,
+      14000
+    );
   }
 };

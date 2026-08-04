@@ -192,7 +192,7 @@ module.exports = {
         confirmationEmbed
       );
 
-      if (!logSent) {
+      if (!logSent.ok) {
         throw new Error('Le log /pl n’a pas pu être envoyé dans ACCEPTANCE_LOG_CHANNEL_ID.');
       }
 

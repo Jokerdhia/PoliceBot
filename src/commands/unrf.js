@@ -59,28 +59,27 @@ module.exports = {
     }
 
     const blacklistResult = await checkBlacklist(interaction.guild, member.id);
-    if (!blacklistResult.ok) {
-      // Sécurité : on conserve le blocage du salon si la blacklist ne peut pas être vérifiée.
-      await blockCvWriting(member, 'Vérification blacklist impossible après /unrf').catch(() => null);
-      return replyEphemeral(
-        interaction,
-        `⚠️ Le refus a été annulé, mais le salon CV reste bloqué car la blacklist n’a pas pu être vérifiée : ${blacklistResult.reason}`,
-        14000
-      );
-    }
+    let accessWarning = null;
+    let remainsBlocked = false;
 
-    if (blacklistResult.blacklisted) {
-      await blockCvWriting(member, 'Joueur toujours blacklisté après /unrf').catch(() => null);
+    if (!blacklistResult.ok) {
+      remainsBlocked = true;
+      accessWarning = `Blacklist non vérifiable : ${blacklistResult.reason}`;
+      await blockCvWriting(member, 'Vérification blacklist impossible après /unrf').catch((error) => {
+        accessWarning += ` • maintien du blocage impossible : ${error.message}`;
+      });
+    } else if (blacklistResult.blacklisted) {
+      remainsBlocked = true;
+      await blockCvWriting(member, 'Joueur toujours blacklisté après /unrf').catch((error) => {
+        accessWarning = `Maintien du blocage impossible : ${error.message}`;
+      });
     } else {
       try {
         await restoreCvWriting(member, `Refus CV annulé par ${interaction.user.tag} : ${reason}`);
       } catch (error) {
+        remainsBlocked = true;
+        accessWarning = `Permissions du salon CV non restaurées : ${error.message}`;
         console.error('Erreur restauration écriture salon CV sur /unrf :', error);
-        return replyEphemeral(
-          interaction,
-          `⚠️ Le refus a été annulé, mais les permissions du salon CV Police n’ont pas pu être restaurées : ${error.message}`,
-          14000
-        );
       }
     }
 
@@ -92,29 +91,35 @@ module.exports = {
         iconURL: interaction.guild.iconURL({ size: 128 }) || undefined
       })
       .setTitle('✅ REFUS CV ANNULÉ')
-      .setDescription(blacklistResult.blacklisted
-        ? `${member} n’est plus refusé, mais reste **blacklisté** : il ne peut toujours pas écrire dans le salon CV Police.`
+      .setDescription(remainsBlocked
+        ? `${member} n’est plus refusé, mais l’accès au salon CV Police reste bloqué.`
         : `${member} peut de nouveau écrire dans le salon CV Police, être accepté avec **/ac**, puis intégré avec **/pl**.`)
       .addFields(
         { name: '👤 CANDIDAT', value: `${member}\n**Discord ID :** \`${member.id}\``, inline: true },
         { name: '👮 RESPONSABLE', value: `${interaction.user}\n**Discord ID :** \`${interaction.user.id}\``, inline: true },
         { name: '📝 RAISON DE L’ANNULATION', value: reason, inline: false },
         { name: '📋 ANCIENNE RAISON DU REFUS', value: oldReason.slice(0, 1024), inline: false },
-        { name: '🔓 NOUVEAU STATUT', value: blacklistResult.blacklisted
-          ? 'Le refus est retiré, mais le blocage du salon reste actif car le joueur est blacklisté.'
+        { name: '🔓 NOUVEAU STATUT', value: remainsBlocked
+          ? (blacklistResult.blacklisted
+            ? 'Le refus est retiré, mais le blocage reste actif car le joueur est blacklisté.'
+            : `Le refus est retiré, mais le blocage reste actif. ${accessWarning || ''}`.slice(0, 1024))
           : 'Le blocage du salon CV Police est retiré. Le rôle **Accepted CV Police** n’est pas ajouté automatiquement.', inline: false }
       )
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setFooter({ text: 'Une trace de cette annulation est conservée dans la base de données.' })
       .setTimestamp();
 
-    await sendLog(interaction.guild, config.channels.refusalLogs, embed);
+    const logResult = await sendLog(interaction.guild, config.channels.refusalLogs, embed, 'REFUSED CV (/unrf)');
+    const warnings = [];
+    if (remainsBlocked) warnings.push(accessWarning || (blacklistResult.blacklisted ? 'joueur toujours blacklisté' : 'accès au salon encore bloqué'));
+    if (!logResult.ok) warnings.push(`log annulation non envoyé : ${logResult.reason}`);
+
     return replyEphemeral(
       interaction,
-      blacklistResult.blacklisted
-        ? `⚠️ Refus annulé pour ${member}, mais le joueur reste blacklisté et ne peut pas écrire dans le salon CV Police.`
-        : `✅ Refus annulé pour ${member}. **Raison :** ${reason}\nLe joueur peut de nouveau écrire dans le salon CV Police. Tu peux maintenant utiliser **/ac**, puis **/pl**.`,
-      11000
+      warnings.length
+        ? `⚠️ Refus annulé pour ${member}. **Raison :** ${reason}\n${warnings.join(' • ')}`
+        : `✅ Refus annulé pour ${member}. **Raison :** ${reason}\nLe joueur peut de nouveau écrire dans le salon CV Police. Tu peux maintenant utiliser **/ac**, puis **/pl**. Le log a été envoyé.`,
+      14000
     );
   }
 };

@@ -1,35 +1,62 @@
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
 
-async function sendLog(guild, channelId, embed) {
+async function resolveLogChannel(guild, channelId, label = 'logs') {
+  if (!channelId) {
+    return { ok: false, reason: `Aucun identifiant configuré pour le salon ${label}.` };
+  }
+
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel) {
+    return { ok: false, reason: `Salon ${label} introuvable (${channelId}).` };
+  }
+  if (!channel.isTextBased() || typeof channel.send !== 'function') {
+    return { ok: false, reason: `Le salon ${label} (${channelId}) n’accepte pas les messages.` };
+  }
+
+  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  const permissions = me ? channel.permissionsFor(me) : null;
+  const missing = [];
+  if (!permissions?.has(PermissionFlagsBits.ViewChannel)) missing.push('Voir le salon');
+  if (!permissions?.has(PermissionFlagsBits.SendMessages)) missing.push('Envoyer des messages');
+  if (!permissions?.has(PermissionFlagsBits.EmbedLinks)) missing.push('Intégrer des liens');
+
+  if (missing.length) {
+    return {
+      ok: false,
+      reason: `Permissions manquantes dans #${channel.name} (${channelId}) : ${missing.join(', ')}.`
+    };
+  }
+
+  return { ok: true, channel };
+}
+
+async function sendLog(guild, channelId, embed, label = 'logs') {
   try {
-    const channel = await guild.channels.fetch(channelId).catch(() => null);
-
-    if (!channel || !channel.isTextBased()) {
-      console.error('Salon de logs introuvable ou non textuel.');
-      return false;
+    const result = await resolveLogChannel(guild, channelId, label);
+    if (!result.ok) {
+      console.error(`❌ Log non envoyé : ${result.reason}`);
+      return { ok: false, reason: result.reason };
     }
 
-    const permissions = channel.permissionsFor(guild.members.me);
-    const canSend =
-      permissions?.has(PermissionFlagsBits.ViewChannel) &&
-      permissions?.has(PermissionFlagsBits.SendMessages) &&
-      permissions?.has(PermissionFlagsBits.EmbedLinks);
-
-    if (!canSend) {
-      console.error(
-        `Permissions insuffisantes dans le salon de logs ${channelId} ` +
-        '(Voir le salon, Envoyer des messages et Intégrer des liens sont requis).'
-      );
-      return false;
-    }
-
-    await channel.send({ embeds: [embed] });
-    return true;
+    const message = await result.channel.send({ embeds: [embed] });
+    console.log(`✅ Log ${label} envoyé dans #${result.channel.name} (${result.channel.id}) • message ${message.id}`);
+    return { ok: true, channelId: result.channel.id, messageId: message.id };
   } catch (error) {
-    console.error(`Impossible d’envoyer le log dans ${channelId}:`, error.message);
+    const reason = `Impossible d’envoyer le log ${label} dans ${channelId}: ${error.message}`;
+    console.error(`❌ ${reason}`, error);
+    return { ok: false, reason };
+  }
+}
+
+async function diagnoseLogChannel(guild, channelId, label) {
+  const result = await resolveLogChannel(guild, channelId, label);
+  if (!result.ok) {
+    console.error(`❌ ${label} : ${result.reason}`);
     return false;
   }
+  console.log(`✅ ${label} : #${result.channel.name} (${result.channel.id}) — permissions OK`);
+  return true;
 }
 
 function discordDate(date, style = 'F') {
@@ -175,6 +202,7 @@ function badgeUpdateEmbed({ member, rpName, oldBadge, newBadge, executor }) {
 
 module.exports = {
   sendLog,
+  diagnoseLogChannel,
   recruitmentEmbed,
   kickEmbed,
   badgeUpdateEmbed

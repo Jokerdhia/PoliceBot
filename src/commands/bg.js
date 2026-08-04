@@ -95,7 +95,7 @@ module.exports = {
         })
       );
 
-      const logNotice = logSent ? '' : '\n⚠️ Le badge est modifié, mais le log n’a pas pu être envoyé.';
+      const logNotice = logSent.ok ? '' : '\n⚠️ Le badge est modifié, mais le log n’a pas pu être envoyé.';
       return replyEphemeral(
         interaction,
         `✅ Badge de ${member} modifié : **${oldBadge} → ${newBadge}**.\nNouveau pseudo : **${newNickname}**${logNotice}`

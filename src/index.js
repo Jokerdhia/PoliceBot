@@ -11,8 +11,9 @@ const { replyEphemeral } = require('./utils/replies');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
 const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
+const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.6.7-cv-channel-protection';
+const BUILD_VERSION = '1.6.8-robust-refusal-logs';
 let ready = false;
 const client = new Client({ intents: [
   GatewayIntentBits.Guilds,
@@ -57,6 +58,13 @@ client.once(Events.ClientReady, async (readyClient) => {
   const configuredAcceptedRole = await guild.roles.fetch(config.roles.acceptedCv).catch(() => null);
   console.log(`ℹ️ Rôle Accepted CV configuré : ${configuredAcceptedRole ? `${configuredAcceptedRole.name} (${configuredAcceptedRole.id})` : 'introuvable'}`);
   console.log('ℹ️ Scan automatique au démarrage désactivé pour éviter les anciens panneaux et les doublons.');
+  console.log('🔎 Vérification des salons et permissions de logs…');
+  await diagnoseLogChannel(guild, config.channels.acceptanceLogs, 'ACCEPTANCE_LOG_CHANNEL_ID');
+  await diagnoseLogChannel(guild, config.channels.refusalLogs, 'REFUSED_CV_CHANNEL_ID');
+  await diagnoseLogChannel(guild, config.channels.kickLogs, 'KICK_LOG_CHANNEL_ID');
+  if (config.channels.refusalLogs === config.channels.acceptanceLogs) {
+    console.error('❌ REFUSED_CV_CHANNEL_ID pointe vers le salon Accepted Police. Mets un identifiant différent.');
+  }
   if (config.channels.cvPolice) {
     const cvChannel = await guild.channels.fetch(config.channels.cvPolice).catch(() => null);
     console.log(`ℹ️ Salon CV Police protégé : ${cvChannel ? `${cvChannel.name} (${cvChannel.id})` : 'introuvable'}`);
