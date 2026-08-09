@@ -19,7 +19,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.7.3-connection-diagnostics-fix';
+const BUILD_VERSION = '1.7.4-discord-ratelimit-recovery';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;
@@ -27,6 +27,9 @@ let discordLoginStartedAt = null;
 let discordLoginError = null;
 let lastInteractionAt = null;
 let lastInteractionName = null;
+let discordRetryTimer = null;
+let discordConnectInFlight = false;
+let discordRetryCount = 0;
 // Intents strictement minimaux : les slash commands ont uniquement besoin de Guilds.
 // Aucun intent privilégié n'est nécessaire pour /pl, /ac, /kick, /bg, /rc, /rf et /unrf.
 const gatewayIntents = [GatewayIntentBits.Guilds];
@@ -56,7 +59,9 @@ const server = http.createServer(async (request, response) => {
       discordLoginError,
       uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
       lastInteractionAt,
-      lastInteractionName
+      lastInteractionName,
+      discordRetryCount,
+      discordRetryScheduled: Boolean(discordRetryTimer)
     }));
   }
 
@@ -246,14 +251,14 @@ function discordHttps(pathname, timeoutMs = 10000) {
       family: 4,
       headers: {
         Authorization: `Bot ${config.token}`,
-        'User-Agent': 'PoliceBot/1.7.3 (+Render)'
+        'User-Agent': 'PoliceBot/1.7.4 (+Render)'
       },
       timeout: timeoutMs
     }, (response) => {
       let body = '';
       response.setEncoding('utf8');
       response.on('data', (chunk) => { if (body.length < 16384) body += chunk; });
-      response.on('end', () => resolve({ status: response.statusCode, body }));
+      response.on('end', () => resolve({ status: response.statusCode, body, headers: response.headers }));
     });
     request.on('timeout', () => request.destroy(new Error(`timeout HTTPS Discord après ${timeoutMs} ms`)));
     request.on('error', reject);
@@ -261,82 +266,130 @@ function discordHttps(pathname, timeoutMs = 10000) {
   });
 }
 
+function getDiscordRetryAfter(result) {
+  let seconds = 0;
+  try {
+    const parsed = JSON.parse(result?.body || '{}');
+    const value = Number(parsed?.retry_after);
+    if (Number.isFinite(value) && value > 0) seconds = value;
+  } catch {}
+
+  if (!seconds) {
+    const header = Number(result?.headers?.['retry-after']);
+    if (Number.isFinite(header) && header > 0) seconds = header;
+  }
+  if (!seconds) {
+    const resetAfter = Number(result?.headers?.['x-ratelimit-reset-after']);
+    if (Number.isFinite(resetAfter) && resetAfter > 0) seconds = resetAfter;
+  }
+  return Math.max(5, Math.ceil(seconds || 60));
+}
+
+function scheduleDiscordRetry(delaySeconds, reason) {
+  if (client.isReady() || discordRetryTimer) return;
+
+  const safeDelay = Math.min(Math.max(Number(delaySeconds) || 60, 10), 15 * 60);
+  discordRetryCount += 1;
+  discordLoginError = `${reason} — nouvelle tentative dans ${safeDelay}s`;
+  console.warn(`⏳ ${reason}. Nouvelle tentative Discord dans ${safeDelay}s (tentative #${discordRetryCount}).`);
+
+  discordRetryTimer = setTimeout(() => {
+    discordRetryTimer = null;
+    void connectDiscord();
+  }, safeDelay * 1000);
+  discordRetryTimer.unref?.();
+}
+
 async function diagnoseDiscordAccess() {
-  console.log('🧪 Test Discord REST (IPv4) avant Gateway...');
+  console.log('🧪 Test léger du token Discord avant Gateway...');
   try {
     const me = await discordHttps('/api/v10/users/@me');
+
     if (me.status === 401) {
       discordLoginError = 'DISCORD_TOKEN refusé par Discord (HTTP 401)';
       console.error('❌ DISCORD_TOKEN invalide/refusé (HTTP 401). Regénère le token dans Discord Developer Portal > Bot, puis remplace DISCORD_TOKEN sur Render.');
-      return false;
+      return { ok: false, fatal: true };
     }
+
+    if (me.status === 429) {
+      const retryAfter = getDiscordRetryAfter(me);
+      console.warn(`⚠️ Discord REST limite temporairement cette IP (HTTP 429). Retry-After ≈ ${retryAfter}s.`);
+      console.warn('ℹ️ Ce n’est PAS une erreur de /pl, Neon ou du port Render. Le bot va attendre automatiquement au lieu de redéployer en boucle.');
+      return { ok: false, fatal: false, retryAfter, reason: 'Rate limit Discord HTTP 429' };
+    }
+
     if (me.status !== 200) {
-      discordLoginError = `Discord REST /users/@me HTTP ${me.status}`;
-      console.error(`❌ Discord REST répond HTTP ${me.status}. Le Gateway ne sera pas lancé tant que ce test échoue.`);
-      return false;
+      console.warn(`⚠️ Diagnostic REST Discord HTTP ${me.status}. On tente quand même le Gateway; le diagnostic ne bloque plus le bot.`);
+      return { ok: true, warning: `REST HTTP ${me.status}` };
     }
+
     let user = null;
     try { user = JSON.parse(me.body); } catch {}
     console.log(`✅ Token Discord accepté par l'API REST${user?.username ? ` : ${user.username} (${user.id})` : ''}.`);
+
     if (user?.id && user.id !== config.clientId) {
-      console.error(`❌ CLIENT_ID ne correspond pas au token : CLIENT_ID=${config.clientId}, token=${user.id}. Corrige CLIENT_ID sur Render.`);
       discordLoginError = 'CLIENT_ID ne correspond pas au bot du DISCORD_TOKEN';
-      return false;
+      console.error(`❌ CLIENT_ID ne correspond pas au token : CLIENT_ID=${config.clientId}, token=${user.id}. Corrige CLIENT_ID sur Render.`);
+      return { ok: false, fatal: true };
     }
 
-    const gateway = await discordHttps('/api/v10/gateway/bot');
-    if (gateway.status !== 200) {
-      discordLoginError = `Discord REST /gateway/bot HTTP ${gateway.status}`;
-      console.error(`❌ Impossible d'obtenir le Gateway Discord : HTTP ${gateway.status}.`);
-      return false;
-    }
-    let info = null;
-    try { info = JSON.parse(gateway.body); } catch {}
-    console.log(`✅ Gateway Discord accessible${info?.url ? ` : ${info.url}` : ''}.`);
-    if (info?.session_start_limit) {
-      const lim = info.session_start_limit;
-      console.log(`ℹ️ Sessions Gateway : ${lim.remaining}/${lim.total} restantes, reset dans ${Math.ceil((lim.reset_after || 0)/1000)}s.`);
-      if (lim.remaining === 0) {
-        console.error('❌ Limite de démarrage de session Discord épuisée. Attends le reset indiqué avant de redéployer.');
-        discordLoginError = 'Limite session_start_limit Discord épuisée';
-        return false;
-      }
-    }
-    return true;
+    return { ok: true };
   } catch (error) {
-    discordLoginError = `Discord HTTPS inaccessible: ${error?.message || error}`;
-    console.error('❌ Render ne parvient pas à joindre l’API Discord en HTTPS/IPv4 :', error?.message || error);
-    return false;
+    console.warn('⚠️ Diagnostic REST Discord indisponible :', error?.message || error);
+    console.warn('ℹ️ Le diagnostic ne bloque plus la connexion Gateway. Tentative directe...');
+    return { ok: true, warning: error?.message || String(error) };
   }
 }
 
 async function connectDiscord() {
+  if (client.isReady() || discordConnectInFlight) return;
+  discordConnectInFlight = true;
   discordLoginStartedAt = new Date().toISOString();
   discordLoginError = null;
 
-  const accessOk = await diagnoseDiscordAccess();
-  if (!accessOk) {
-    console.error('⛔ Connexion Gateway annulée : corrige le diagnostic ci-dessus puis redéploie.');
-    return;
-  }
-
-  console.log('🔐 Connexion au Gateway Discord...');
-  const warningTimer = setTimeout(() => {
-    if (!client.isReady()) {
-      console.warn('⚠️ Gateway Discord toujours non READY après 30 secondes alors que REST + token sont valides.');
-      console.warn('⚠️ Le problème est maintenant isolé au WebSocket Gateway (réseau/proxy/Discord), pas à /pl ni à Neon.');
-    }
-  }, 30_000);
-  warningTimer.unref?.();
-
   try {
-    await client.login(config.token);
-    clearTimeout(warningTimer);
-    console.log('✅ Authentification Gateway Discord acceptée.');
-  } catch (error) {
-    clearTimeout(warningTimer);
-    discordLoginError = error?.message || String(error);
-    console.error('❌ Connexion Gateway Discord impossible :', discordLoginError);
+    const access = await diagnoseDiscordAccess();
+    if (!access.ok) {
+      if (access.fatal) {
+        console.error('⛔ Connexion Discord annulée : configuration invalide.');
+        return;
+      }
+      scheduleDiscordRetry(access.retryAfter, access.reason || 'Discord temporairement indisponible');
+      return;
+    }
+
+    console.log('🔐 Connexion au Gateway Discord...');
+    const warningTimer = setTimeout(() => {
+      if (!client.isReady()) {
+        console.warn('⚠️ Gateway Discord toujours non READY après 30 secondes.');
+        console.warn('ℹ️ Le processus reste actif; aucune relance Render n’est nécessaire.');
+      }
+    }, 30_000);
+    warningTimer.unref?.();
+
+    try {
+      await client.login(config.token);
+      clearTimeout(warningTimer);
+      discordRetryCount = 0;
+      discordLoginError = null;
+      console.log('✅ Authentification Gateway Discord acceptée.');
+    } catch (error) {
+      clearTimeout(warningTimer);
+      const message = error?.message || String(error);
+      discordLoginError = message;
+      console.error('❌ Connexion Gateway Discord impossible :', message);
+
+      // Les erreurs réseau/rate-limit doivent se réparer seules sans nouveau deploy.
+      if (/429|rate.?limit|timeout|timed out|ECONN|EAI_AGAIN|ENET|socket|gateway/i.test(message)) {
+        scheduleDiscordRetry(60, `Connexion Discord temporairement indisponible (${message})`);
+      } else if (/token|401|invalid/i.test(message)) {
+        console.error('⛔ Vérifie DISCORD_TOKEN sur Render. Aucune boucle de reconnexion agressive ne sera lancée.');
+      } else {
+        scheduleDiscordRetry(90, `Gateway Discord non connecté (${message})`);
+      }
+    }
+  } finally {
+    discordConnectInFlight = false;
   }
 }
 
