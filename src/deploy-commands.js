@@ -7,13 +7,14 @@ const rc = require('./commands/rc');
 const ac = require('./commands/ac');
 const rf = require('./commands/rf');
 const unrf = require('./commands/unrf');
+const ready = require('./commands/ready');
 
-const commands = [pl, kick, bg, rc, ac, rf, unrf].map((command) => command.data.toJSON());
+const commands = [pl, kick, bg, rc, ac, rf, unrf, ready].map((command) => command.data.toJSON());
 const rest = new REST({ version: '10' }).setToken(config.token);
 
 (async () => {
   try {
-    console.log('Déploiement des commandes /ac, /pl, /kick, /bg, /rc, /rf et /unrf (/pl sans nom RP)...');
+    console.log('Déploiement des commandes /ac, /pl, /kick, /bg, /rc, /rf, /unrf et /ready (/pl sans nom RP)...');
     await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), { body: commands });
     console.log('✅ Commandes déployées avec succès.');
   } catch (error) {

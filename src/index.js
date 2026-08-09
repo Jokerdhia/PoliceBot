@@ -10,7 +10,7 @@ const database = require('./database');
 const commands = [
   require('./commands/pl'), require('./commands/kick'),
   require('./commands/bg'), require('./commands/rc'), require('./commands/ac'),
-  require('./commands/rf'), require('./commands/unrf')
+  require('./commands/rf'), require('./commands/unrf'), require('./commands/ready')
 ];
 const { replyEphemeral } = require('./utils/replies');
 const { handleAcceptedRole, handleOnboardingButton, handleOnboardingModal } = require('./utils/onboarding');
@@ -18,7 +18,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.8.0-stable-optimized';
+const BUILD_VERSION = '1.8.1-ready-fix';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;
@@ -79,7 +79,9 @@ const server = http.createServer(async (request, response) => {
     }
 
     const fullyReady = client.isReady() && databaseOk;
-    response.writeHead(fullyReady ? 200 : 503);
+    // Endpoint de diagnostic manuel : toujours HTTP 200 pour être lisible dans le navigateur/Render.
+    // Le champ status indique clairement si Discord + Neon sont réellement prêts.
+    response.writeHead(200);
     return response.end(JSON.stringify({
       version: BUILD_VERSION,
       status: fullyReady ? 'ready' : 'not_ready',
