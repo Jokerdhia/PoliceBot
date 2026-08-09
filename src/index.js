@@ -18,7 +18,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.8.1-ready-fix';
+const BUILD_VERSION = '1.8.2-interaction-ack';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;
@@ -209,23 +209,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
   lastInteractionName = interaction.isChatInputCommand() ? `/${interaction.commandName}` : interaction.customId || interaction.type;
 
   try {
-    if (await handleOnboardingButton(interaction)) return;
-    if (await handleOnboardingModal(interaction)) return;
-    if (!interaction.isChatInputCommand()) return;
+    // ACK des slash commands AVANT tout autre handler. Même si une dépendance (Neon, REST,
+    // cache Discord) ralentit, Discord reçoit la réponse dans la fenêtre des ~3 secondes.
+    if (interaction.isChatInputCommand()) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const command = client.commands.get(interaction.commandName);
-    if (!command) {
-      await interaction.reply({ content: '❌ Cette commande n’est plus disponible. Réessaie dans quelques secondes.', flags: MessageFlags.Ephemeral });
+      const command = client.commands.get(interaction.commandName);
+      if (!command) {
+        await interaction.editReply({ content: '❌ Cette commande n’est plus disponible. Réessaie dans quelques secondes.' });
+        return;
+      }
+
+      await command.execute(interaction);
+
+      const elapsed = Date.now() - interactionStartedAt;
+      console.log(`✅ ${interaction.commandName} exécutée par ${interaction.user.tag} en ${elapsed} ms`);
       return;
     }
 
-    // ACK immédiat : Discord exige une réponse en ~3 secondes. Toutes les commandes
-    // travaillent ensuite avec editReply(), ce qui élimine « L’application ne répond plus ».
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await command.execute(interaction);
-
-    const elapsed = Date.now() - interactionStartedAt;
-    console.log(`✅ ${interaction.commandName} exécutée par ${interaction.user.tag} en ${elapsed} ms`);
+    // Boutons/modals ont leur propre ACK immédiat (showModal/deferReply).
+    if (await handleOnboardingButton(interaction)) return;
+    if (await handleOnboardingModal(interaction)) return;
   } catch (error) {
     console.error(`❌ Erreur interaction ${lastInteractionName} (${interaction.id}) :`, error);
     await replyEphemeral(
