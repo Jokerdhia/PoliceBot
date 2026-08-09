@@ -31,7 +31,7 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Accès refusé : le rôle **Recruitment** est obligatoire.', 7000);
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const badge = interaction.options.getInteger('badge', true);
     const officer = await database.findByBadge(badge);
 

@@ -19,7 +19,7 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Accès refusé : le rôle **Recruitment** est obligatoire.', 7000);
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const user = interaction.options.getUser('membre', true);
     const reason = interaction.options.getString('raison', true).trim();
 

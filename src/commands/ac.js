@@ -47,7 +47,7 @@ module.exports = {
       );
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = interaction.options.getUser('membre', true);
     if (user.id === interaction.user.id) {

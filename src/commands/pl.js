@@ -28,7 +28,7 @@ module.exports = {
       );
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = interaction.options.getUser('membre', true);
 
@@ -119,6 +119,8 @@ module.exports = {
     }
 
     const hadCitizenRole = member.roles.cache.has(config.roles.citizen);
+    const hadPoliceRole = member.roles.cache.has(config.roles.police);
+    const hadAcademyRole = member.roles.cache.has(config.roles.academy);
     const hadAcceptedCvRole = Boolean(
       config.roles.acceptedCv && member.roles.cache.has(config.roles.acceptedCv)
     );
@@ -193,17 +195,24 @@ module.exports = {
       );
 
       if (!logSent.ok) {
-        throw new Error('Le log /pl n’a pas pu être envoyé dans ACCEPTANCE_LOG_CHANNEL_ID.');
+        console.warn(`⚠️ /pl réussi mais log non envoyé : ${logSent.reason}`);
       }
 
-      // La commande ne laisse aucun message privé : le résultat reste uniquement dans les logs.
+      // La commande est déjà acquittée auprès de Discord. On supprime ensuite la réponse
+      // éphémère pour garder le salon propre sans provoquer « L’application ne répond plus ».
       await interaction.deleteReply().catch(() => null);
       return null;
     } catch (error) {
       console.error('Erreur /pl :', error);
 
       // Retour arrière si le panneau ne peut pas être envoyé.
-      await member.roles.remove([config.roles.police, config.roles.academy]).catch(() => null);
+      const rolesAddedByCommand = [];
+      if (!hadPoliceRole) rolesAddedByCommand.push(config.roles.police);
+      if (!hadAcademyRole) rolesAddedByCommand.push(config.roles.academy);
+      if (rolesAddedByCommand.length) {
+        await member.roles.remove(rolesAddedByCommand).catch(() => null);
+      }
+      await database.clearOnboardingPending(member.id).catch(() => null);
       if (hadCitizenRole) {
         await member.roles.add(config.roles.citizen).catch(() => null);
       }

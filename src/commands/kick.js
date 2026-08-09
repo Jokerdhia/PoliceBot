@@ -34,7 +34,7 @@ module.exports = {
       );
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = interaction.options.getUser('membre', true);
     const reason = interaction.options.getString('raison', true).trim();

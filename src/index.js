@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits, MessageFlags, ActivityType } = require('discord.js');
 const config = require('./config');
 const database = require('./database');
 const commands = [
@@ -13,8 +13,11 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.6.8-robust-refusal-logs';
+const BUILD_VERSION = '1.7.0-stable-interactions';
+const startedAt = Date.now();
 let ready = false;
+let lastInteractionAt = null;
+let lastInteractionName = null;
 const client = new Client({ intents: [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMembers,
@@ -27,13 +30,13 @@ const server = http.createServer(async (request, response) => {
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   if (request.url === '/') {
     response.writeHead(200);
-    return response.end(JSON.stringify({ service: 'Police Bot Discord', version: BUILD_VERSION, status: ready ? 'online' : 'starting' }));
+    return response.end(JSON.stringify({ service: 'Police Bot Discord', version: BUILD_VERSION, status: ready ? 'online' : 'starting', discord: client.isReady(), uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }));
   }
   if (request.url === '/health') {
     try {
       const databaseLatencyMs = await database.ping();
       response.writeHead(ready ? 200 : 503);
-      return response.end(JSON.stringify({ version: BUILD_VERSION, status: ready ? 'healthy' : 'starting', discord: client.isReady(), database: 'connected', databaseLatencyMs }));
+      return response.end(JSON.stringify({ version: BUILD_VERSION, status: ready ? 'healthy' : 'starting', discord: client.isReady(), database: 'connected', databaseLatencyMs, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), lastInteractionAt, lastInteractionName }));
     } catch (error) {
       response.writeHead(503);
       return response.end(JSON.stringify({ status: 'unhealthy', database: 'disconnected', error: error.message }));
@@ -45,13 +48,31 @@ const server = http.createServer(async (request, response) => {
 
 client.once(Events.ClientReady, async (readyClient) => {
   ready = true;
-  console.log(`✅ Connecté en tant que ${readyClient.user.tag}`);
+  console.log(`✅ Connecté en tant que ${readyClient.user.tag} (${readyClient.user.id})`);
   console.log(`✅ BUILD ${BUILD_VERSION}`);
+
+  if (config.clientId !== readyClient.user.id) {
+    console.error(`❌ CLIENT_ID incorrect : Render=${config.clientId}, bot connecté=${readyClient.user.id}. Les slash commands peuvent viser une autre application.`);
+  } else {
+    console.log('✅ CLIENT_ID correspond bien au bot connecté.');
+  }
+
+  readyClient.user.setPresence({
+    activities: [{ name: 'HMPD • Recruitment', type: ActivityType.Watching }],
+    status: 'online'
+  });
   console.log('✅ /pl ne crée aucun badge et ne modifie aucun pseudo.');
   console.log('✅ Le badge est créé uniquement après envoi valide du formulaire.');
   console.log(`✅ Commandes disponibles : ${commands.map((c) => `/${c.data.name}`).join(', ')}`);
   const guild = await readyClient.guilds.fetch(config.guildId).catch(() => null);
   if (!guild) return console.error('❌ Serveur introuvable. Vérifie GUILD_ID.');
+
+  try {
+    await guild.commands.set(commands.map((command) => command.data.toJSON()));
+    console.log(`✅ Slash commands synchronisées automatiquement sur ${guild.name} (${guild.id}).`);
+  } catch (error) {
+    console.error('❌ Synchronisation automatique des slash commands impossible :', error);
+  }
   if (config.roles.acceptedCv === config.roles.academy) {
     console.error('❌ CONFIGURATION INCORRECTE : ACCEPTED_CV_ROLE_ID et ACADEMY_ROLE_ID sont identiques. Corrige les variables Render.');
   }
@@ -114,19 +135,41 @@ ${explanation}`).catch(() => null);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  const interactionStartedAt = Date.now();
+  lastInteractionAt = new Date().toISOString();
+  lastInteractionName = interaction.isChatInputCommand() ? `/${interaction.commandName}` : interaction.customId || interaction.type;
+
   try {
     if (await handleOnboardingButton(interaction)) return;
     if (await handleOnboardingModal(interaction)) return;
     if (!interaction.isChatInputCommand()) return;
+
     const command = client.commands.get(interaction.commandName);
-    if (command) await command.execute(interaction);
+    if (!command) {
+      await interaction.reply({ content: '❌ Cette commande n’est plus disponible. Réessaie dans quelques secondes.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    // ACK immédiat : Discord exige une réponse en ~3 secondes. Toutes les commandes
+    // travaillent ensuite avec editReply(), ce qui élimine « L’application ne répond plus ».
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await command.execute(interaction);
+
+    const elapsed = Date.now() - interactionStartedAt;
+    console.log(`✅ ${interaction.commandName} exécutée par ${interaction.user.tag} en ${elapsed} ms`);
   } catch (error) {
-    console.error(`Erreur sur interaction ${interaction.id}:`, error);
-    await replyEphemeral(interaction, '❌ Une erreur inattendue est survenue.', 10_000).catch(() => null);
+    console.error(`❌ Erreur interaction ${lastInteractionName} (${interaction.id}) :`, error);
+    await replyEphemeral(
+      interaction,
+      `❌ Une erreur inattendue est survenue. Référence : \`${interaction.id}\`.`,
+      12_000
+    ).catch((replyError) => console.error('❌ Impossible de répondre à l’interaction en erreur :', replyError));
   }
 });
 client.on(Events.Error, (error) => console.error('Erreur Discord :', error));
-process.on('unhandledRejection', (error) => console.error('Promesse rejetée :', error));
+process.on('unhandledRejection', (error) => console.error('❌ Promesse rejetée :', error));
+process.on('uncaughtException', (error) => console.error('❌ Exception non interceptée :', error));
+process.on('warning', (warning) => console.warn('⚠️ Node warning :', warning));
 
 async function shutdown(signal) {
   console.log(`🛑 Arrêt demandé (${signal})...`);
@@ -141,9 +184,12 @@ process.once('SIGINT', () => shutdown('SIGINT'));
 
 (async () => {
   try {
+    console.log(`🚀 Démarrage Police Bot ${BUILD_VERSION}...`);
     await database.initializeDatabase();
     server.listen(config.port, '0.0.0.0', () => console.log(`✅ Serveur HTTP actif sur le port ${config.port}`));
-    await client.login(config.token);
+    console.log('🔐 Connexion à Discord...');
+    const loginTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de connexion Discord après 20 secondes. Vérifie DISCORD_TOKEN et la connectivité Render.')), 20_000));
+    await Promise.race([client.login(config.token), loginTimeout]);
   } catch (error) {
     console.error('❌ Démarrage impossible :', error.message);
     await database.close().catch(() => null);

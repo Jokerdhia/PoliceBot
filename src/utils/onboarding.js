@@ -175,23 +175,9 @@ async function handleOnboardingButton(interaction) {
     return true;
   }
 
-  const member = await interaction.guild.members.fetch(targetId).catch(() => null);
-  if (!member || !member.roles.cache.has(config.roles.academy) || !member.roles.cache.has(config.roles.police)) {
-    await replyEphemeral(interaction, '❌ يجب أن تمتلك رتبتي **Police** و **Academy** لطلب الشارة.', 8000);
-    return true;
-  }
-
-  const existingOfficer = await database.findByUserId(member.id);
-  if (existingOfficer) {
-    await replyEphemeral(interaction, `❌ لديك بالفعل الشارة رقم **${existingOfficer.badge}**.`, 8000);
-    return true;
-  }
-
-  if (!(await database.isOnboardingPending(member.id))) {
-    await replyEphemeral(interaction, '❌ لا يوجد طلب شارة نشط. اطلب من مسؤول التوظيف استخدام الأمر **/pl** من جديد.', 9000);
-    return true;
-  }
-
+  // Important : Discord impose une réponse au bouton en quelques secondes.
+  // On ouvre donc le modal immédiatement et toutes les validations réseau/DB
+  // sont refaites au submit (handleOnboardingModal), qui est différé dès le début.
   const modal = new ModalBuilder()
     .setCustomId(`${MODAL_PREFIX}${targetId}`)
     .setTitle('طلب شارة الشرطة');
