@@ -1,4 +1,5 @@
 const http = require('node:http');
+const https = require('node:https');
 const dns = require('node:dns');
 
 // Render peut avoir une connectivité IPv6 variable vers le Gateway Discord.
@@ -18,7 +19,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.7.2-discord-gateway-fix';
+const BUILD_VERSION = '1.7.3-connection-diagnostics-fix';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;
@@ -26,22 +27,15 @@ let discordLoginStartedAt = null;
 let discordLoginError = null;
 let lastInteractionAt = null;
 let lastInteractionName = null;
-// Intents minimaux par défaut. GuildMembers et MessageContent sont des intents
-// privilégiés qui peuvent empêcher le Gateway d'arriver à READY lorsqu'ils ne sont
-// pas activés dans le Discord Developer Portal. /pl n'en a pas besoin.
-const gatewayIntents = [
-  GatewayIntentBits.Guilds,
-  GatewayIntentBits.GuildMessages
-];
+// Intents strictement minimaux : les slash commands ont uniquement besoin de Guilds.
+// Aucun intent privilégié n'est nécessaire pour /pl, /ac, /kick, /bg, /rc, /rf et /unrf.
+const gatewayIntents = [GatewayIntentBits.Guilds];
 
-if (process.env.ENABLE_GUILD_MEMBERS_INTENT === 'true') {
-  gatewayIntents.push(GatewayIntentBits.GuildMembers);
-}
-if (process.env.ENABLE_MESSAGE_CONTENT_INTENT === 'true') {
-  gatewayIntents.push(GatewayIntentBits.MessageContent);
-}
-
-const client = new Client({ intents: gatewayIntents });
+const client = new Client({
+  intents: gatewayIntents,
+  failIfNotExists: false,
+  allowedMentions: { parse: [], repliedUser: false }
+});
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));
 
 const server = http.createServer(async (request, response) => {
@@ -141,11 +135,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.warn('⚠️ CV_POLICE_CHANNEL_ID absent : la protection du salon CV Police est désactivée.');
   }
 });
-if (gatewayIntents.includes(GatewayIntentBits.GuildMembers)) {
-  client.on(Events.GuildMemberUpdate, handleAcceptedRole);
-} else {
-  console.log('ℹ️ Intent GuildMembers désactivé : /pl reste pleinement fonctionnel; le déclenchement automatique hors /pl est désactivé.');
-}
+console.log('ℹ️ Intents privilégiés désactivés : commandes slash actives sans GuildMembers/MessageContent.');
 
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild || message.author.bot || !isCvChannel(message.channel)) return;
@@ -245,17 +235,96 @@ async function shutdown(signal) {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
+function discordHttps(pathname, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const request = https.request({
+      protocol: 'https:',
+      hostname: 'discord.com',
+      port: 443,
+      path: pathname,
+      method: 'GET',
+      family: 4,
+      headers: {
+        Authorization: `Bot ${config.token}`,
+        'User-Agent': 'PoliceBot/1.7.3 (+Render)'
+      },
+      timeout: timeoutMs
+    }, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { if (body.length < 16384) body += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, body }));
+    });
+    request.on('timeout', () => request.destroy(new Error(`timeout HTTPS Discord après ${timeoutMs} ms`)));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+async function diagnoseDiscordAccess() {
+  console.log('🧪 Test Discord REST (IPv4) avant Gateway...');
+  try {
+    const me = await discordHttps('/api/v10/users/@me');
+    if (me.status === 401) {
+      discordLoginError = 'DISCORD_TOKEN refusé par Discord (HTTP 401)';
+      console.error('❌ DISCORD_TOKEN invalide/refusé (HTTP 401). Regénère le token dans Discord Developer Portal > Bot, puis remplace DISCORD_TOKEN sur Render.');
+      return false;
+    }
+    if (me.status !== 200) {
+      discordLoginError = `Discord REST /users/@me HTTP ${me.status}`;
+      console.error(`❌ Discord REST répond HTTP ${me.status}. Le Gateway ne sera pas lancé tant que ce test échoue.`);
+      return false;
+    }
+    let user = null;
+    try { user = JSON.parse(me.body); } catch {}
+    console.log(`✅ Token Discord accepté par l'API REST${user?.username ? ` : ${user.username} (${user.id})` : ''}.`);
+    if (user?.id && user.id !== config.clientId) {
+      console.error(`❌ CLIENT_ID ne correspond pas au token : CLIENT_ID=${config.clientId}, token=${user.id}. Corrige CLIENT_ID sur Render.`);
+      discordLoginError = 'CLIENT_ID ne correspond pas au bot du DISCORD_TOKEN';
+      return false;
+    }
+
+    const gateway = await discordHttps('/api/v10/gateway/bot');
+    if (gateway.status !== 200) {
+      discordLoginError = `Discord REST /gateway/bot HTTP ${gateway.status}`;
+      console.error(`❌ Impossible d'obtenir le Gateway Discord : HTTP ${gateway.status}.`);
+      return false;
+    }
+    let info = null;
+    try { info = JSON.parse(gateway.body); } catch {}
+    console.log(`✅ Gateway Discord accessible${info?.url ? ` : ${info.url}` : ''}.`);
+    if (info?.session_start_limit) {
+      const lim = info.session_start_limit;
+      console.log(`ℹ️ Sessions Gateway : ${lim.remaining}/${lim.total} restantes, reset dans ${Math.ceil((lim.reset_after || 0)/1000)}s.`);
+      if (lim.remaining === 0) {
+        console.error('❌ Limite de démarrage de session Discord épuisée. Attends le reset indiqué avant de redéployer.');
+        discordLoginError = 'Limite session_start_limit Discord épuisée';
+        return false;
+      }
+    }
+    return true;
+  } catch (error) {
+    discordLoginError = `Discord HTTPS inaccessible: ${error?.message || error}`;
+    console.error('❌ Render ne parvient pas à joindre l’API Discord en HTTPS/IPv4 :', error?.message || error);
+    return false;
+  }
+}
+
 async function connectDiscord() {
   discordLoginStartedAt = new Date().toISOString();
   discordLoginError = null;
-  console.log('🔐 Connexion à Discord...');
 
-  // Diagnostic seulement : ne tue jamais le processus après 20/30 secondes.
-  // discord.js gère ensuite les reconnexions Gateway automatiquement.
+  const accessOk = await diagnoseDiscordAccess();
+  if (!accessOk) {
+    console.error('⛔ Connexion Gateway annulée : corrige le diagnostic ci-dessus puis redéploie.');
+    return;
+  }
+
+  console.log('🔐 Connexion au Gateway Discord...');
   const warningTimer = setTimeout(() => {
     if (!client.isReady()) {
-      console.warn('⚠️ Discord met plus de 30 secondes à se connecter. Le service Render reste actif et continue la tentative.');
-      console.warn('⚠️ Vérifie DISCORD_TOKEN + Bot > Privileged Gateway Intents dans le Developer Portal si cela persiste.');
+      console.warn('⚠️ Gateway Discord toujours non READY après 30 secondes alors que REST + token sont valides.');
+      console.warn('⚠️ Le problème est maintenant isolé au WebSocket Gateway (réseau/proxy/Discord), pas à /pl ni à Neon.');
     }
   }, 30_000);
   warningTimer.unref?.();
@@ -263,12 +332,11 @@ async function connectDiscord() {
   try {
     await client.login(config.token);
     clearTimeout(warningTimer);
-    console.log('✅ Authentification Discord acceptée, attente/maintien du Gateway actif.');
+    console.log('✅ Authentification Gateway Discord acceptée.');
   } catch (error) {
     clearTimeout(warningTimer);
     discordLoginError = error?.message || String(error);
-    console.error('❌ Connexion Discord impossible :', discordLoginError);
-    console.error('⚠️ Le serveur HTTP reste actif pour que Render ne boucle pas en redéploiement. Corrige DISCORD_TOKEN/intents puis redeploie.');
+    console.error('❌ Connexion Gateway Discord impossible :', discordLoginError);
   }
 }
 

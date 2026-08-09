@@ -20,9 +20,9 @@ for (const name of required.filter((name) => name.endsWith('_ID'))) {
 }
 
 module.exports = Object.freeze({
-  token: process.env.DISCORD_TOKEN,
-  clientId: process.env.CLIENT_ID,
-  guildId: process.env.GUILD_ID,
+  token: process.env.DISCORD_TOKEN.trim(),
+  clientId: process.env.CLIENT_ID.trim(),
+  guildId: process.env.GUILD_ID.trim(),
   databaseUrl: process.env.DATABASE_URL,
   port: Number.parseInt(process.env.PORT || '3000', 10),
   roles: Object.freeze({
