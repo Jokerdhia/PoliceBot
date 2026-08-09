@@ -1,6 +1,6 @@
 {
   "name": "police-bot-discord",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "Bot Discord police - diagnostic REST/Gateway, token normalisé et intents minimaux pour Render.",
   "main": "src/index.js",
   "type": "commonjs",
