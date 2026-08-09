@@ -51,7 +51,7 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Cette commande ne peut pas cibler un bot.', 7000);
     }
 
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    const member = interaction.options.getMember('membre') || await interaction.guild.members.fetch(user.id).catch(() => null);
 
     if (!member) {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);

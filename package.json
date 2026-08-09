@@ -1,13 +1,13 @@
 {
   "name": "police-bot-discord",
-  "version": "1.7.5",
-  "description": "Bot Discord police - diagnostic REST/Gateway, token normalisé et intents minimaux pour Render.",
+  "version": "1.8.0",
+  "description": "Bot Discord Police optimisé pour Render/Neon : slash commands, onboarding badge, faible consommation REST et diagnostics sûrs.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
-    "check": "node --check src/index.js && node --check src/database.js && node --check src/deploy-commands.js && for f in src/commands/*.js src/utils/*.js; do node --check \"$f\" || exit 1; done"
+    "check": "find src -name \"*.js\" -type f -print0 | xargs -0 -n1 node --check"
   },
   "engines": {
     "node": "22.x"

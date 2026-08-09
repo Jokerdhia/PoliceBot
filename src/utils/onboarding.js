@@ -259,7 +259,7 @@ async function handleOnboardingModal(interaction) {
     return true;
   }
 
-  const blacklistResult = await checkBlacklist(interaction.guild, member.id).catch((error) => ({
+  const blacklistResult = await checkBlacklist(interaction.guild, member.id, member).catch((error) => ({
     ok: false,
     reason: error.message
   }));

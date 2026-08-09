@@ -40,7 +40,7 @@ module.exports = {
       return replyEphemeral(interaction, '❌ Un bot ne peut pas être recruté.', 7000);
     }
 
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    const member = interaction.options.getMember('membre') || await interaction.guild.members.fetch(user.id).catch(() => null);
     if (!member) {
       return replyEphemeral(interaction, '❌ Ce membre est introuvable sur le serveur.', 7000);
     }
@@ -70,7 +70,7 @@ module.exports = {
 
     let blacklistResult;
     try {
-      blacklistResult = await checkBlacklist(interaction.guild, member.id);
+      blacklistResult = await checkBlacklist(interaction.guild, member.id, member);
     } catch (error) {
       console.error('Erreur de vérification Blacklist :', error);
       return replyEphemeral(

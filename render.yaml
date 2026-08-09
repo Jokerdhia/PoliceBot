@@ -13,25 +13,38 @@ services:
       - key: DISCORD_TOKEN
         sync: false
       - key: CLIENT_ID
-        value: "1531351585353891850"
+        sync: false
       - key: GUILD_ID
-        value: "1528151508346994739"
+        sync: false
       - key: CITIZEN_ROLE_ID
-        value: "1528151508346994741"
+        sync: false
       - key: POLICE_ROLE_ID
-        value: "1528151508393398413"
+        sync: false
       - key: ACADEMY_ROLE_ID
-        value: "1528151508456177753"
+        sync: false
       - key: ACCEPTED_CV_ROLE_ID
         sync: false
       - key: RECRUITMENT_ROLE_ID
-        value: "1528151508393398415"
+        sync: false
       - key: BLACKLIST_CHANNEL_ID
-        value: "1528151510242824405"
+        sync: false
       - key: ACCEPTANCE_LOG_CHANNEL_ID
-        value: "1531358531318448340"
+        sync: false
       - key: KICK_LOG_CHANNEL_ID
-        value: "1531362488573235340"
-
+        sync: false
       - key: ONBOARDING_CHANNEL_ID
-        value: "1531389020339179621"
+        sync: false
+      - key: REFUSED_CV_CHANNEL_ID
+        sync: false
+      - key: CV_POLICE_CHANNEL_ID
+        sync: false
+      - key: SYNC_COMMANDS_ON_START
+        value: "false"
+      - key: STARTUP_DIAGNOSTICS
+        value: "false"
+      - key: ENABLE_GUILD_MEMBERS_INTENT
+        value: "false"
+      - key: ENABLE_MESSAGE_CONTENT_INTENT
+        value: "false"
+      - key: DELETE_EPHEMERAL_REPLIES
+        value: "false"
