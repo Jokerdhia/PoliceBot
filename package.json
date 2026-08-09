@@ -1,6 +1,6 @@
 {
   "name": "police-bot-discord",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Bot Discord police : /ac Accepted CV, /pl rôles uniquement, badge exclusivement après formulaire onboarding.",
   "main": "src/index.js",
   "type": "commonjs",
@@ -10,7 +10,7 @@
     "check": "node --check src/index.js && node --check src/database.js && node --check src/deploy-commands.js && for f in src/commands/*.js src/utils/*.js; do node --check \"$f\" || exit 1; done"
   },
   "engines": {
-    "node": ">=20 <25"
+    "node": "22.x"
   },
   "dependencies": {
     "discord.js": "^14.22.1",

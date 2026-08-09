@@ -1,3 +1,14 @@
+# PoliceBot v1.7.1 — Render / Discord Gateway Fix
+
+Cette version corrige le faux échec de déploiement Render causé par `/health` qui renvoyait 503 tant que Discord n'était pas Ready, ainsi que le timeout fatal de 20 secondes sur `client.login()`.
+
+- `/health` = liveness Render, toujours 200 si le processus HTTP est vivant.
+- `/ready` = diagnostic complet Discord + Neon.
+- Connexion Discord non bloquante et non fatale pour Render.
+- IPv4 prioritaire pour le Gateway Discord.
+- Node.js 22 LTS.
+- ACK immédiat des slash commands conservé pour éviter « L'application ne répond plus ».
+
 # Police Bot Discord — Render + Neon
 
 ## Installation locale

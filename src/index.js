@@ -1,4 +1,9 @@
 const http = require('node:http');
+const dns = require('node:dns');
+
+// Render peut avoir une connectivité IPv6 variable vers le Gateway Discord.
+// IPv4 en priorité évite les connexions Gateway qui restent bloquées au démarrage.
+dns.setDefaultResultOrder('ipv4first');
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags, ActivityType } = require('discord.js');
 const config = require('./config');
 const database = require('./database');
@@ -13,9 +18,12 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.7.0-stable-interactions';
+const BUILD_VERSION = '1.7.1-render-gateway-fix';
 const startedAt = Date.now();
 let ready = false;
+let databaseReady = false;
+let discordLoginStartedAt = null;
+let discordLoginError = null;
 let lastInteractionAt = null;
 let lastInteractionName = null;
 const client = new Client({ intents: [
@@ -28,20 +36,50 @@ client.commands = new Collection(commands.map((command) => [command.data.name, c
 
 const server = http.createServer(async (request, response) => {
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
-  if (request.url === '/') {
+
+  // Liveness Render : doit rester 200 tant que le processus HTTP fonctionne.
+  // Ne dépend PAS de Discord, sinon Render marque le déploiement en échec
+  // lorsque le Gateway Discord met plus de temps à se connecter.
+  if (request.url === '/' || request.url === '/health') {
     response.writeHead(200);
-    return response.end(JSON.stringify({ service: 'Police Bot Discord', version: BUILD_VERSION, status: ready ? 'online' : 'starting', discord: client.isReady(), uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }));
+    return response.end(JSON.stringify({
+      service: 'Police Bot Discord',
+      version: BUILD_VERSION,
+      status: 'alive',
+      discord: client.isReady() ? 'connected' : 'connecting',
+      database: databaseReady ? 'initialized' : 'starting',
+      discordLoginStartedAt,
+      discordLoginError,
+      uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+      lastInteractionAt,
+      lastInteractionName
+    }));
   }
-  if (request.url === '/health') {
+
+  // Readiness/diagnostic complet pour vérification manuelle.
+  if (request.url === '/ready') {
+    let databaseLatencyMs = null;
+    let databaseOk = false;
     try {
-      const databaseLatencyMs = await database.ping();
-      response.writeHead(ready ? 200 : 503);
-      return response.end(JSON.stringify({ version: BUILD_VERSION, status: ready ? 'healthy' : 'starting', discord: client.isReady(), database: 'connected', databaseLatencyMs, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), lastInteractionAt, lastInteractionName }));
+      databaseLatencyMs = await database.ping();
+      databaseOk = true;
     } catch (error) {
-      response.writeHead(503);
-      return response.end(JSON.stringify({ status: 'unhealthy', database: 'disconnected', error: error.message }));
+      discordLoginError = discordLoginError || null;
     }
+
+    const fullyReady = client.isReady() && databaseOk;
+    response.writeHead(fullyReady ? 200 : 503);
+    return response.end(JSON.stringify({
+      version: BUILD_VERSION,
+      status: fullyReady ? 'ready' : 'not_ready',
+      discord: client.isReady(),
+      database: databaseOk ? 'connected' : 'disconnected',
+      databaseLatencyMs,
+      discordLoginError,
+      uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000)
+    }));
   }
+
   response.writeHead(404);
   response.end(JSON.stringify({ error: 'Not found' }));
 });
@@ -182,17 +220,47 @@ async function shutdown(signal) {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
+async function connectDiscord() {
+  discordLoginStartedAt = new Date().toISOString();
+  discordLoginError = null;
+  console.log('🔐 Connexion à Discord...');
+
+  // Diagnostic seulement : ne tue jamais le processus après 20/30 secondes.
+  // discord.js gère ensuite les reconnexions Gateway automatiquement.
+  const warningTimer = setTimeout(() => {
+    if (!client.isReady()) {
+      console.warn('⚠️ Discord met plus de 30 secondes à se connecter. Le service Render reste actif et continue la tentative.');
+      console.warn('⚠️ Vérifie DISCORD_TOKEN + Bot > Privileged Gateway Intents dans le Developer Portal si cela persiste.');
+    }
+  }, 30_000);
+  warningTimer.unref?.();
+
+  try {
+    await client.login(config.token);
+    clearTimeout(warningTimer);
+    console.log('✅ Authentification Discord acceptée, attente/maintien du Gateway actif.');
+  } catch (error) {
+    clearTimeout(warningTimer);
+    discordLoginError = error?.message || String(error);
+    console.error('❌ Connexion Discord impossible :', discordLoginError);
+    console.error('⚠️ Le serveur HTTP reste actif pour que Render ne boucle pas en redéploiement. Corrige DISCORD_TOKEN/intents puis redeploie.');
+  }
+}
+
 (async () => {
   try {
     console.log(`🚀 Démarrage Police Bot ${BUILD_VERSION}...`);
-    await database.initializeDatabase();
+
+    // Ouvrir le port immédiatement : Render peut valider le service sans attendre Discord.
     server.listen(config.port, '0.0.0.0', () => console.log(`✅ Serveur HTTP actif sur le port ${config.port}`));
-    console.log('🔐 Connexion à Discord...');
-    const loginTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de connexion Discord après 20 secondes. Vérifie DISCORD_TOKEN et la connectivité Render.')), 20_000));
-    await Promise.race([client.login(config.token), loginTimeout]);
+
+    await database.initializeDatabase();
+    databaseReady = true;
+
+    // Ne bloque pas le cycle de déploiement Render sur le Gateway Discord.
+    void connectDiscord();
   } catch (error) {
-    console.error('❌ Démarrage impossible :', error.message);
-    await database.close().catch(() => null);
-    process.exit(1);
+    console.error('❌ Initialisation impossible :', error?.stack || error);
+    // Le serveur reste en vie pour exposer les logs/health ; éviter les boucles de restart.
   }
 })();
