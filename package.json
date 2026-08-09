@@ -1,7 +1,7 @@
 {
   "name": "police-bot-discord",
-  "version": "1.7.1",
-  "description": "Bot Discord police : /ac Accepted CV, /pl rôles uniquement, badge exclusivement après formulaire onboarding.",
+  "version": "1.7.2",
+  "description": "Bot Discord police - correctif Gateway/intents privilégiés + interactions /pl fiables sur Render.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {

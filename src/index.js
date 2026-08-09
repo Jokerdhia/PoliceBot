@@ -18,7 +18,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.7.1-render-gateway-fix';
+const BUILD_VERSION = '1.7.2-discord-gateway-fix';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;
@@ -26,12 +26,22 @@ let discordLoginStartedAt = null;
 let discordLoginError = null;
 let lastInteractionAt = null;
 let lastInteractionName = null;
-const client = new Client({ intents: [
+// Intents minimaux par défaut. GuildMembers et MessageContent sont des intents
+// privilégiés qui peuvent empêcher le Gateway d'arriver à READY lorsqu'ils ne sont
+// pas activés dans le Discord Developer Portal. /pl n'en a pas besoin.
+const gatewayIntents = [
   GatewayIntentBits.Guilds,
-  GatewayIntentBits.GuildMembers,
-  GatewayIntentBits.GuildMessages,
-  GatewayIntentBits.MessageContent
-] });
+  GatewayIntentBits.GuildMessages
+];
+
+if (process.env.ENABLE_GUILD_MEMBERS_INTENT === 'true') {
+  gatewayIntents.push(GatewayIntentBits.GuildMembers);
+}
+if (process.env.ENABLE_MESSAGE_CONTENT_INTENT === 'true') {
+  gatewayIntents.push(GatewayIntentBits.MessageContent);
+}
+
+const client = new Client({ intents: gatewayIntents });
 client.commands = new Collection(commands.map((command) => [command.data.name, command]));
 
 const server = http.createServer(async (request, response) => {
@@ -131,7 +141,11 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.warn('⚠️ CV_POLICE_CHANNEL_ID absent : la protection du salon CV Police est désactivée.');
   }
 });
-client.on(Events.GuildMemberUpdate, handleAcceptedRole);
+if (gatewayIntents.includes(GatewayIntentBits.GuildMembers)) {
+  client.on(Events.GuildMemberUpdate, handleAcceptedRole);
+} else {
+  console.log('ℹ️ Intent GuildMembers désactivé : /pl reste pleinement fonctionnel; le déclenchement automatique hors /pl est désactivé.');
+}
 
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild || message.author.bot || !isCvChannel(message.channel)) return;
@@ -204,6 +218,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
     ).catch((replyError) => console.error('❌ Impossible de répondre à l’interaction en erreur :', replyError));
   }
 });
+client.on(Events.ShardError, (error, shardId) => {
+  console.error(`❌ Gateway Discord shard ${shardId} :`, error?.message || error);
+});
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  console.warn(`⚠️ Gateway Discord déconnecté (shard ${shardId}) : code=${event?.code} reason=${event?.reason || 'inconnue'}`);
+  if (event?.code === 4014) {
+    console.error('❌ Discord refuse un intent privilégié. Désactive ENABLE_GUILD_MEMBERS_INTENT / ENABLE_MESSAGE_CONTENT_INTENT ou active-les dans Developer Portal > Bot > Privileged Gateway Intents.');
+  }
+});
+client.on(Events.ShardReconnecting, (shardId) => console.warn(`🔄 Reconnexion Gateway Discord (shard ${shardId})...`));
+client.on(Events.Invalidated, () => console.error('❌ Session Discord invalidée. Vérifie le token du bot.'));
 client.on(Events.Error, (error) => console.error('Erreur Discord :', error));
 process.on('unhandledRejection', (error) => console.error('❌ Promesse rejetée :', error));
 process.on('uncaughtException', (error) => console.error('❌ Exception non interceptée :', error));
@@ -250,6 +275,7 @@ async function connectDiscord() {
 (async () => {
   try {
     console.log(`🚀 Démarrage Police Bot ${BUILD_VERSION}...`);
+    console.log(`ℹ️ Intents Gateway : ${gatewayIntents.join(', ')}`);
 
     // Ouvrir le port immédiatement : Render peut valider le service sans attendre Discord.
     server.listen(config.port, '0.0.0.0', () => console.log(`✅ Serveur HTTP actif sur le port ${config.port}`));
