@@ -30,9 +30,24 @@ function getConfiguredRole(guild, roleId, label) {
   return role;
 }
 
+async function fetchMemberFresh(member, attempts = 3) {
+  let last = member;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      // Discord.js v14 attend un objet d'options pour appliquer réellement force=true.
+      // fetch(member.id, { force: true }) ignore le second argument et peut donc renvoyer
+      // le membre en cache, ce qui créait de faux échecs juste après une modification de rôles.
+      last = await member.guild.members.fetch({ user: member.id, force: true, cache: true });
+    } catch (_) {
+      // On conserve la dernière version connue et on retente brièvement.
+    }
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return last;
+}
+
 async function verifyMember(member) {
-  // Une seule lecture REST de contrôle après toutes les mutations au lieu de multiples fetch forcés.
-  return member.guild.members.fetch(member.id, { force: true }).catch(() => member);
+  return fetchMemberFresh(member);
 }
 
 async function removeAcceptedCvRoles(member, reason, verify = true) {
@@ -107,4 +122,4 @@ async function resetToCitizen(member, reason = 'Retrait Police') {
   return member;
 }
 
-module.exports = { recruitMember, resetToCitizen, removeAcceptedCvRoles, getAcceptedCvRoles };
+module.exports = { recruitMember, resetToCitizen, removeAcceptedCvRoles, getAcceptedCvRoles, fetchMemberFresh };

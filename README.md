@@ -1,9 +1,13 @@
-# Police Bot Discord — v1.8.0
+# Police Bot Discord — v1.8.3
 
 Version optimisée pour Render + Neon PostgreSQL.
 
 ## Commandes
 `/ac` accepte un CV, `/pl` lance la pré-intégration, `/kick` retire un policier, `/bg` change un badge, `/rc` recherche un badge, `/rf` refuse un CV et `/unrf` annule un refus.
+
+## Correctif v1.8.3
+- Corrige les faux échecs de `/ac`, `/pl` et `/kick` causés par une lecture du cache Discord juste après une modification de rôles.
+- Utilise désormais `guild.members.fetch({ user, force: true })` avec plusieurs contrôles courts pour confirmer l’état réel du membre.
 
 ## Optimisations importantes
 - Le port HTTP démarre immédiatement pour Render (`/health`).

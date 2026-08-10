@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags, PermissionFlagsBits } = require('disc
 const config = require('../config');
 const database = require('../database');
 const { canUsePoliceCommands } = require('../utils/permissions');
-const { resetToCitizen } = require('../utils/roles');
+const { resetToCitizen, fetchMemberFresh } = require('../utils/roles');
 const { sendLog, kickEmbed } = require('../utils/logs');
 const { replyEphemeral } = require('../utils/replies');
 
@@ -106,7 +106,7 @@ module.exports = {
       );
 
       // Vérification après modification pour éviter qu'un ancien badge reste affiché.
-      const refreshedMember = await interaction.guild.members.fetch(member.id, { force: true });
+      const refreshedMember = await fetchMemberFresh(member);
       if (/^\[\d{1,4}\]\s*/.test(refreshedMember.nickname || '')) {
         throw new Error('Le pseudo contient encore un badge après le retrait. Vérifie la hiérarchie du rôle du bot.');
       }

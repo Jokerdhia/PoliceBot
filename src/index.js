@@ -18,7 +18,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.8.2-interaction-ack';
+const BUILD_VERSION = '1.8.3-role-refresh-fix';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;

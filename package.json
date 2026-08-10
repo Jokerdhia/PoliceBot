@@ -1,7 +1,7 @@
 {
   "name": "police-bot-discord",
-  "version": "1.8.2",
-  "description": "Bot Discord Police optimisé pour Render/Neon : slash commands, onboarding badge, faible consommation REST et diagnostics sûrs.",
+  "version": "1.8.3",
+  "description": "Bot Discord Police optimisé pour Render/Neon : slash commands, onboarding badge, vérification fiable des rôles et diagnostics sûrs.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {

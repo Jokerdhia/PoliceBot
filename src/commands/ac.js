@@ -4,6 +4,7 @@ const database = require('../database');
 const { canUsePoliceCommands } = require('../utils/permissions');
 const { checkBlacklist } = require('../utils/blacklist');
 const { replyEphemeral } = require('../utils/replies');
+const { fetchMemberFresh } = require('../utils/roles');
 
 function normalizeRoleName(name) {
   return String(name || '')
@@ -123,7 +124,7 @@ module.exports = {
         await member.roles.remove(rolesToRemove, 'Nettoyage des rôles avant intégration Accepted CV');
       }
 
-      const refreshedMember = await interaction.guild.members.fetch(member.id, { force: true });
+      const refreshedMember = await fetchMemberFresh(member);
       if (!refreshedMember.roles.cache.has(acceptedRole.id)) {
         throw new Error('Discord n’a pas confirmé l’ajout du rôle Accepted CV Police.');
       }
