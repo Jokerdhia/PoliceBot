@@ -48,3 +48,5 @@ services:
         value: "false"
       - key: DELETE_EPHEMERAL_REPLIES
         value: "false"
+      - key: BLACKLIST_MAX_MESSAGES
+        value: "1000"

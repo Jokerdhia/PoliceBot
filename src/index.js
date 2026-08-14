@@ -18,7 +18,7 @@ const { checkBlacklist } = require('./utils/blacklist');
 const { isCvChannel, blockCvWriting } = require('./utils/cvChannelAccess');
 const { diagnoseLogChannel } = require('./utils/logs');
 
-const BUILD_VERSION = '1.8.3-role-refresh-fix';
+const BUILD_VERSION = '1.8.4-gateway-recovery';
 const startedAt = Date.now();
 let ready = false;
 let databaseReady = false;
@@ -28,6 +28,9 @@ let lastInteractionAt = null;
 let lastInteractionName = null;
 let discordConnectInFlight = false;
 let lastRateLimit = null;
+let gatewayRecoveryTimer = null;
+let gatewayRecoveryAttempt = 0;
+let shuttingDown = false;
 // Les slash commands ont uniquement besoin de Guilds. Les intents privilégiés sont
 // optionnels et ne sont activés que si les fonctionnalités correspondantes le demandent.
 const gatewayIntents = [GatewayIntentBits.Guilds];
@@ -97,8 +100,14 @@ const server = http.createServer(async (request, response) => {
   response.end(JSON.stringify({ error: 'Not found' }));
 });
 
-client.once(Events.ClientReady, async (readyClient) => {
+client.on(Events.ClientReady, async (readyClient) => {
   ready = true;
+  discordLoginError = null;
+  gatewayRecoveryAttempt = 0;
+  if (gatewayRecoveryTimer) {
+    clearTimeout(gatewayRecoveryTimer);
+    gatewayRecoveryTimer = null;
+  }
   console.log(`✅ Connecté en tant que ${readyClient.user.tag} (${readyClient.user.id})`);
   console.log(`✅ BUILD ${BUILD_VERSION}`);
 
@@ -253,12 +262,27 @@ client.on(Events.ShardError, (error, shardId) => {
   console.error(`❌ Gateway Discord shard ${shardId} :`, error?.message || error);
 });
 client.on(Events.ShardDisconnect, (event, shardId) => {
+  ready = false;
   console.warn(`⚠️ Gateway Discord déconnecté (shard ${shardId}) : code=${event?.code} reason=${event?.reason || 'inconnue'}`);
   if (event?.code === 4014) {
     console.error('❌ Discord refuse un intent privilégié. Désactive l’intent concerné dans Render ou active-le dans Developer Portal > Bot > Privileged Gateway Intents.');
   }
+  if (event?.code !== 4014) scheduleGatewayRecovery('déconnexion prolongée');
 });
-client.on(Events.ShardReconnecting, (shardId) => console.warn(`🔄 Reconnexion Gateway Discord (shard ${shardId})...`));
+client.on(Events.ShardReconnecting, (shardId) => {
+  ready = false;
+  console.warn(`🔄 Reconnexion Gateway Discord (shard ${shardId})...`);
+});
+client.on(Events.ShardResume, (shardId, replayedEvents) => {
+  ready = true;
+  discordLoginError = null;
+  gatewayRecoveryAttempt = 0;
+  if (gatewayRecoveryTimer) {
+    clearTimeout(gatewayRecoveryTimer);
+    gatewayRecoveryTimer = null;
+  }
+  console.log(`✅ Gateway Discord repris (shard ${shardId}, ${replayedEvents} événement(s) rejoué(s)).`);
+});
 client.on(Events.Invalidated, () => console.error('❌ Session Discord invalidée. Vérifie le token du bot.'));
 client.on(Events.Error, (error) => console.error('Erreur Discord :', error));
 process.on('unhandledRejection', (error) => console.error('❌ Promesse rejetée :', error));
@@ -266,6 +290,7 @@ process.on('uncaughtException', (error) => console.error('❌ Exception non inte
 process.on('warning', (warning) => console.warn('⚠️ Node warning :', warning));
 
 async function shutdown(signal) {
+  shuttingDown = true;
   console.log(`🛑 Arrêt demandé (${signal})...`);
   ready = false;
   server.close();
@@ -276,6 +301,24 @@ async function shutdown(signal) {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
+function scheduleGatewayRecovery(reason) {
+  if (shuttingDown || client.isReady() || gatewayRecoveryTimer) return;
+
+  gatewayRecoveryAttempt += 1;
+  const delayMs = Math.min(30_000 * (2 ** (gatewayRecoveryAttempt - 1)), 120_000);
+  console.warn(`⚠️ Nouvelle tentative Gateway dans ${Math.round(delayMs / 1000)} s (${reason}).`);
+
+  gatewayRecoveryTimer = setTimeout(async () => {
+    gatewayRecoveryTimer = null;
+    if (shuttingDown || client.isReady()) return;
+
+    await client.destroy().catch(() => null);
+    discordConnectInFlight = false;
+    void connectDiscord();
+  }, delayMs);
+  gatewayRecoveryTimer.unref?.();
+}
+
 async function connectDiscord() {
   if (client.isReady() || discordConnectInFlight) return;
   discordConnectInFlight = true;
@@ -283,12 +326,15 @@ async function connectDiscord() {
   discordLoginError = null;
   console.log('🔐 Connexion au Gateway Discord (sans pré-test REST)...');
 
-  const watchdog = setTimeout(() => {
+  const watchdog = setTimeout(async () => {
     if (!client.isReady()) {
       discordLoginError = 'Gateway Discord non READY après 60 secondes';
       console.warn('⚠️ Gateway Discord toujours non READY après 60 secondes.');
       console.warn('ℹ️ Aucun test REST supplémentaire n’est lancé afin de ne pas aggraver un éventuel HTTP 429.');
       console.warn('ℹ️ Si Render utilise une IP partagée limitée par Discord, le code ne peut pas contourner ce blocage réseau.');
+      await client.destroy().catch(() => null);
+      discordConnectInFlight = false;
+      scheduleGatewayRecovery('connexion non READY');
     }
   }, 60_000);
   watchdog.unref?.();
@@ -304,7 +350,7 @@ async function connectDiscord() {
     discordLoginError = message;
     console.error('❌ Connexion Gateway Discord impossible :', message);
     if (/token|invalid|401/i.test(message)) console.error('⛔ Vérifie DISCORD_TOKEN sur Render.');
-    // Discord.js gère ses reconnexions internes. Pas de boucle maison agressive.
+    if (!/token|invalid|401/i.test(message)) scheduleGatewayRecovery('échec de connexion');
   } finally {
     discordConnectInFlight = false;
   }

@@ -73,7 +73,8 @@ module.exports = Object.freeze({
     deleteEphemeralReplies: boolEnv('DELETE_EPHEMERAL_REPLIES', false)
   }),
   limits: Object.freeze({
-    blacklistMaxMessages: intEnv('BLACKLIST_MAX_MESSAGES', 5000, 100, 20000),
+    // Réduit les appels REST Discord sur une petite instance Render.
+    blacklistMaxMessages: intEnv('BLACKLIST_MAX_MESSAGES', 1000, 100, 5000),
     blacklistPositiveCacheMs: intEnv('BLACKLIST_POSITIVE_CACHE_MS', 300000, 10000, 3600000),
     blacklistNegativeCacheMs: intEnv('BLACKLIST_NEGATIVE_CACHE_MS', 15000, 0, 300000)
   })

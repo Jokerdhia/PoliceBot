@@ -1,6 +1,13 @@
-# Police Bot Discord — v1.8.3
+# Police Bot Discord — v1.8.4
 
 Version optimisée pour Render + Neon PostgreSQL.
+
+## Correctif v1.8.4
+- Si le Gateway Discord n'atteint pas READY après 60 secondes, la connexion bloquée est fermée puis relancée automatiquement.
+- Les nouvelles tentatives utilisent un délai progressif de 30 à 120 secondes pour éviter une boucle agressive.
+- Le scan Blacklist est limité par défaut à 1 000 messages pour réduire les appels REST Discord.
+- Après déploiement, vérifier la présence de `✅ BUILD 1.8.4-gateway-recovery` dans les logs.
+- Le diagnostic complet reste disponible sur `/ready`.
 
 ## Commandes
 `/ac` accepte un CV, `/pl` lance la pré-intégration, `/kick` retire un policier, `/bg` change un badge, `/rc` recherche un badge, `/rf` refuse un CV et `/unrf` annule un refus.
@@ -31,7 +38,7 @@ Variables recommandées : `REFUSED_CV_CHANNEL_ID`, `CV_POLICE_CHANNEL_ID`.
 - `ENABLE_GUILD_MEMBERS_INTENT=false` : active l'onboarding automatique sur ajout manuel d'Academy uniquement si l'intent est aussi activé dans Discord Developer Portal.
 - `ENABLE_MESSAGE_CONTENT_INTENT=false` : active la protection temps réel du salon CV uniquement si l'intent est aussi activé dans Discord Developer Portal.
 - `DELETE_EPHEMERAL_REPLIES=false` : recommandé pour limiter les requêtes REST.
-- `BLACKLIST_MAX_MESSAGES=5000`, `BLACKLIST_POSITIVE_CACHE_MS=300000`, `BLACKLIST_NEGATIVE_CACHE_MS=15000`.
+- `BLACKLIST_MAX_MESSAGES=1000`, `BLACKLIST_POSITIVE_CACHE_MS=300000`, `BLACKLIST_NEGATIVE_CACHE_MS=15000`.
 
 ## Déploiement des commandes
 Le bot ne resynchronise plus les commandes à chaque démarrage. Pour les redéployer ponctuellement :
